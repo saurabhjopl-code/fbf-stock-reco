@@ -1,9 +1,9 @@
-function parseFile(file) {
-return new Promise(resolve => {
+function parse(file) {
+return new Promise(res => {
 Papa.parse(file, {
 header: true,
 skipEmptyLines: true,
-complete: res => resolve(res.data)
+complete: r => res(r.data)
 });
 });
 }
