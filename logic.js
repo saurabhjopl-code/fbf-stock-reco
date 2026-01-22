@@ -1,28 +1,28 @@
 /* ======================================================
    FBF STOCK RECOMMENDATION ENGINE
-   VERSION: V1.4 (FC NORMALIZATION FIX)
+   VERSION: V1.5 (FULL SKU–FC MATRIX)
    UI VERSION: V1.1 (LOCKED)
 ====================================================== */
 
-console.log('LOGIC V1.4 LOADED');
+console.log('LOGIC V1.5 LOADED');
 
-const STATE = { config:{}, files:{}, results:{} };
+const STATE = { config:{}, files:{}, results:{}, fcSaleSummary:{} };
 
+/* ELEMENTS */
 const progressBar = document.querySelector('.progress-bar');
 const generateBtn = document.querySelector('.action-bar .btn-primary');
 const exportBtn = document.querySelector('.action-bar .btn-secondary');
 
 const fcSummaryBox = document.querySelectorAll('.summary-grid .card')[0];
-const topSkuBox = document.querySelectorAll('.summary-grid .card')[1];
+const fcSaleBox   = document.querySelectorAll('.summary-grid .card')[1];
 const tabsContainer = document.querySelector('.tabs');
 const tabContent = document.querySelector('.tab-content');
 
-/* ---------- HELPERS ---------- */
+/* HELPERS */
 const norm = v => String(v||'')
   .toLowerCase()
   .replace(/[^a-z0-9]/g,'_')
-  .replace(/_+/g,'_')
-  .trim();
+  .replace(/_+/g,'_');
 
 function setProgress(p){
   progressBar.style.width=p+'%';
@@ -63,7 +63,7 @@ document.querySelectorAll('#fileSection .file-row').forEach((row,i)=>{
   };
 });
 
-/* CORE ENGINE */
+/* ================= CORE ENGINE ================= */
 async function runEngine(){
   readConfig();
   setProgress(10);
@@ -77,70 +77,91 @@ async function runEngine(){
 
   setProgress(30);
 
-  /* UNIWARE STOCK */
+  /* -------- UNIWARE STOCK -------- */
   const uniStock={};
   uniware.forEach(r=>{
     uniStock[r['Sku Code']]=+r['Available (ATP)']||0;
   });
 
-  /* SALE MAP */
+  /* -------- SALE MAP + FC SALE SUMMARY -------- */
   const saleMap={};
+  const fcSaleSummary={};
+
   sales.forEach(r=>{
-    const k=`${r['SKU ID']}|${norm(r['Location Id'])}`;
-    saleMap[k]=(saleMap[k]||0)+(+r['Gross Units']||0);
+    const fc = norm(r['Location Id']);
+    const sku = r['SKU ID'];
+    const qty = +r['Gross Units']||0;
+
+    const key = `${sku}|${fc}`;
+    saleMap[key]=(saleMap[key]||0)+qty;
+    fcSaleSummary[fc]=(fcSaleSummary[fc]||0)+qty;
   });
 
-  /* FBF MAP */
+  STATE.fcSaleSummary = fcSaleSummary;
+
+  /* -------- FBF STOCK -------- */
   const fbfMap={};
   fbf.forEach(r=>{
     if(+r['Live on Website']>0){
-      const k=`${r['SKU']}|${norm(r['Warehouse Id'])}`;
-      fbfMap[k]=+r['Live on Website'];
+      const key=`${r['SKU']}|${norm(r['Warehouse Id'])}`;
+      fbfMap[key]=+r['Live on Website'];
     }
+  });
+
+  /* -------- FK ASK MAP -------- */
+  const fkAskMap={};
+  fcAsk.forEach(r=>{
+    const key=`${r['SKU Id']}|${norm(r['FC'])}`;
+    fkAskMap[key]=+r['Quantity Sent']||0;
   });
 
   setProgress(60);
 
+  /* -------- FULL SKU–FC UNIVERSE -------- */
+  const universe = new Set([
+    ...Object.keys(saleMap),
+    ...Object.keys(fbfMap),
+    ...Object.keys(fkAskMap)
+  ]);
+
   const fcResults={};
-  const skuAgg={};
 
-  fcAsk.forEach(r=>{
-    const sku=r['SKU Id'];
-    const uniSku=r['Uniware SKU'];
-    const fcNorm=norm(r['FC']);
-    const fkAsk=+r['Quantity Sent']||0;
+  universe.forEach(key=>{
+    const [sku,fc]=key.split('|');
 
-    const sale30=saleMap[`${sku}|${fcNorm}`]||0;
-    const fcStock=fbfMap[`${sku}|${fcNorm}`]||0;
+    const sale30 = saleMap[key]||0;
+    const fcStock = fbfMap[key]||0;
+    const fkAsk = fkAskMap[key]||0;
 
-    let sent=0,remark='',drr='-',fcSC='-';
+    let drr='-',fcSC='-',sent=0,remark='';
 
     if(sale30===0){
       remark='No Sale in last 30D';
     }else{
-      drr=(sale30/30);
+      drr=sale30/30;
       fcSC=(fcStock/drr).toFixed(1);
 
       if(fcSC>=STATE.config.targetSC){
         remark='Already sufficient SC';
-      }else if((uniStock[uniSku]||0)<STATE.config.minUniware){
+      }else if(fkAsk===0){
+        remark='FK Ask not available';
+      }else if((uniStock[sku]||0)<STATE.config.minUniware){
         remark='Uniware stock below threshold';
       }else{
         let need=drr*STATE.config.targetSC-fcStock;
-        need=Math.min(need,fkAsk,uniStock[uniSku]-STATE.config.minUniware);
+        need=Math.min(need,fkAsk,uniStock[sku]-STATE.config.minUniware);
         if(need>=STATE.config.minUniware){
           sent=Math.floor(need);
-          uniStock[uniSku]-=sent;
+          uniStock[sku]-=sent;
         }else{
           remark='Uniware stock below threshold';
         }
       }
     }
 
-    if(!fcResults[fcNorm])fcResults[fcNorm]=[];
-    fcResults[fcNorm].push({
+    if(!fcResults[fc])fcResults[fc]=[];
+    fcResults[fc].push({
       'MP SKU':sku,
-      'Uniware SKU':uniSku,
       '30D Sale':sale30,
       'FC Stock':fcStock,
       'FC DRR':drr==='-'?'-':drr.toFixed(2),
@@ -149,45 +170,45 @@ async function runEngine(){
       'Sent Qty':sent,
       'Remarks':sent?'':remark
     });
-
-    if(sale30>0){
-      skuAgg[sku]=(skuAgg[sku]||0)+sale30;
-    }
   });
 
   STATE.results=fcResults;
 
-  renderFCSummary(fcResults);
-  renderTop10(skuAgg);
-  renderTabs(fcResults);
+  renderFCSummary();
+  renderFCSaleSummary();
+  renderTabs();
 
   setProgress(100);
   exportBtn.disabled=false;
 }
 
-/* ---------- RENDERING ---------- */
-function renderFCSummary(res){
+/* ================= RENDERING ================= */
+function renderFCSummary(){
   let h=`<h3>FC Performance Summary</h3>
-  <table class="zebra center"><tr><th>FC</th><th>SKUs</th><th>Total Sent</th></tr>`;
-  Object.keys(res).forEach(fc=>{
-    const rows=res[fc];
+  <table class="zebra center">
+  <tr><th>FC</th><th>SKUs</th><th>Total Sent</th></tr>`;
+  Object.keys(STATE.results).forEach(fc=>{
+    const rows=STATE.results[fc];
     const total=rows.reduce((s,r)=>s+r['Sent Qty'],0);
     h+=`<tr><td>${fc}</td><td>${rows.length}</td><td>${total}</td></tr>`;
   });
   fcSummaryBox.innerHTML=h+`</table>`;
 }
 
-function renderTop10(agg){
-  const top=Object.entries(agg).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  let h=`<h3>Top 10 Selling SKUs</h3>
-  <table class="zebra center"><tr><th>SKU</th><th>30D Sale</th></tr>`;
-  top.forEach(([s,v])=>h+=`<tr><td>${s}</td><td>${v}</td></tr>`);
-  topSkuBox.innerHTML=h+`</table>`;
+function renderFCSaleSummary(){
+  let h=`<h3>FC wise Sale in 30D</h3>
+  <table class="zebra center">
+  <tr><th>FC</th><th>Total Units Sold</th></tr>`;
+  Object.keys(STATE.fcSaleSummary).forEach(fc=>{
+    h+=`<tr><td>${fc}</td><td>${STATE.fcSaleSummary[fc]}</td></tr>`;
+  });
+  fcSaleBox.innerHTML=h+`</table>`;
 }
 
-function renderTabs(res){
+function renderTabs(){
   tabsContainer.innerHTML='';
-  const fcs=Object.keys(res);
+  const fcs=Object.keys(STATE.results);
+
   fcs.forEach((fc,i)=>{
     const b=document.createElement('button');
     b.className='tab'+(i===0?' active':'');
