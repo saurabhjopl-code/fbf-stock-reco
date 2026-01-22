@@ -1,82 +1,78 @@
 /* ======================================================
    FBF STOCK RECOMMENDATION ENGINE
-   FINAL STABLE BUILD – GENERATE GUARANTEED
+   VERSION: V1.8 (UNIWARE SKU FIX)
+   UI VERSION: V1.1 (LOCKED)
 ====================================================== */
 
-console.clear();
-console.log('🚀 FBF Engine Loaded');
+console.log('LOGIC V1.8 LOADED');
 
-/* ================= FC MASTER ================= */
+/* ================= FC MASTER MAP ================= */
 const FC_MAP = {
-  ulub_bts: { key: 'kolkata', label: 'Kolkata' },
-  kolkata_uluberia_bts: { key: 'kolkata', label: 'Kolkata' },
-  malur_bts: { key: 'bangalore', label: 'Bangalore' },
-  malur_bts_warehouse: { key: 'bangalore', label: 'Bangalore' },
-  bhi_vas_wh_nl_01nl: { key: 'mumbai', label: 'Mumbai' },
-  bhiwandi_bts: { key: 'mumbai', label: 'Mumbai' },
-  gur_san_wh_nl_01nl: { key: 'sanpka', label: 'Sanpka' },
-  sanpka_01: { key: 'sanpka', label: 'Sanpka' },
-  hyderabad_medchal_01: { key: 'hyderabad', label: 'Hyderabad' },
-  luc_has_wh_nl_02nl: { key: 'lucknow', label: 'Lucknow' },
-  loc979d1d9aca154ae0a5d72fc1a199aece: { key: 'seller', label: 'Seller' },
-  na: { key: 'seller', label: 'Seller' }
+  'ulub_bts': { key: 'kolkata', label: 'Kolkata' },
+  'kolkata_uluberia_bts': { key: 'kolkata', label: 'Kolkata' },
+
+  'malur_bts': { key: 'bangalore', label: 'Bangalore' },
+  'malur_bts_warehouse': { key: 'bangalore', label: 'Bangalore' },
+
+  'bhi_vas_wh_nl_01nl': { key: 'mumbai', label: 'Mumbai' },
+  'bhiwandi_bts': { key: 'mumbai', label: 'Mumbai' },
+
+  'gur_san_wh_nl_01nl': { key: 'sanpka', label: 'Sanpka' },
+  'sanpka_01': { key: 'sanpka', label: 'Sanpka' },
+
+  'hyderabad_medchal_01': { key: 'hyderabad', label: 'Hyderabad' },
+  'luc_has_wh_nl_02nl': { key: 'lucknow', label: 'Lucknow' },
+
+  'loc979d1d9aca154ae0a5d72fc1a199aece': { key: 'seller', label: 'Seller' },
+  'na': { key: 'seller', label: 'Seller' }
 };
 
-const normalize = v =>
-  String(v || '')
+function normalizeRaw(v) {
+  return String(v || '')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '_')
-    .replace(/_+/g, '_');
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+}
 
-const resolveFC = raw => FC_MAP[normalize(raw)] || null;
+function resolveFC(raw) {
+  const n = normalizeRaw(raw);
+  return FC_MAP[n] || null;
+}
 
-/* ================= STATE ================= */
+/* ================= GLOBAL STATE ================= */
 const STATE = {
+  config: {},
   files: {},
-
-  saleMap: {},      // sku|fc -> sale
-  fcSale: {},       // fc -> total sale
-  fcStockSku: {},   // sku|fc -> fc stock
-  fcStock: {},      // fc -> total stock
-  fkAsk: {},        // sku|fc -> ask
-  skuUni: {},       // mpSku -> uniSku
-  uniStock: {},     // uniSku -> stock
-  fcMetrics: {},
-  results: {}
+  results: {},
+  fcSaleSummary: {},
+  fcLabels: {}
 };
 
-/* ================= FILE UPLOAD ================= */
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('#fileSection .file-row').forEach((row, i) => {
-    const input = row.querySelector('input');
-    const status = row.querySelector('.status');
+/* ================= ELEMENTS ================= */
+const progressBar = document.querySelector('.progress-bar');
+const generateBtn = document.querySelector('.action-bar .btn-primary');
+const exportBtn = document.querySelector('.action-bar .btn-secondary');
 
-    input.addEventListener('change', () => {
-      STATE.files[i] = input.files[0];
-      status.textContent = 'Uploaded';
-      status.style.color = '#16a34a';
-    });
-  });
-});
+const fcSummaryBox = document.querySelectorAll('.summary-grid .card')[0];
+const fcSaleBox = document.querySelectorAll('.summary-grid .card')[1];
+const tabsContainer = document.querySelector('.tabs');
+const tabContent = document.querySelector('.tab-content');
 
-/* ================= HARD GENERATE BIND (UNBREAKABLE) ================= */
-document.addEventListener('click', function (e) {
-  const btn = e.target.closest('button');
-  if (!btn) return;
+/* ================= HELPERS ================= */
+function setProgress(p) {
+  progressBar.style.width = p + '%';
+  progressBar.textContent = p + '%';
+}
 
-  if (btn.textContent.trim().toLowerCase() === 'generate recommendation') {
-    console.clear();
-    console.log('✅ Generate clicked');
-    try {
-      runEngine();
-    } catch (err) {
-      console.error('❌ Engine crashed', err);
-      alert('Generate failed – check console');
-    }
-  }
-});
+function readConfig() {
+  STATE.config = {
+    targetSC: +cfgTargetSC.value,
+    minUniware: +cfgMinUni.value,
+    maxReturn: +cfgMaxReturn.value
+  };
+}
 
-/* ================= FILE READER ================= */
 function readFile(file) {
   return new Promise(resolve => {
     const r = new FileReader();
@@ -94,35 +90,23 @@ function readFile(file) {
   });
 }
 
-/* ================= PROGRESS ================= */
-function setProgress(p) {
-  const bar = document.querySelector('.progress-bar');
-  if (!bar) return;
-  bar.style.width = p + '%';
-  bar.textContent = p + '%';
-}
+/* ================= FILE UPLOAD (LOCKED) ================= */
+document.querySelectorAll('#fileSection .file-row').forEach((row, i) => {
+  const input = row.querySelector('input');
+  const status = row.querySelector('.status');
+  input.onchange = () => {
+    STATE.files[i] = input.files[0];
+    status.textContent = 'Uploaded';
+    status.style.color = '#16a34a';
+  };
+});
 
-/* ================= ENGINE ================= */
+/* ================= CORE ENGINE ================= */
 async function runEngine() {
-  if (Object.keys(STATE.files).length !== 4) {
-    alert('Please upload all 4 files');
-    return;
-  }
-
-  /* SAFE RESET (FILES KEPT) */
-  STATE.saleMap = {};
-  STATE.fcSale = {};
-  STATE.fcStockSku = {};
-  STATE.fcStock = {};
-  STATE.fkAsk = {};
-  STATE.skuUni = {};
-  STATE.uniStock = {};
-  STATE.fcMetrics = {};
-  STATE.results = {};
-
+  readConfig();
   setProgress(10);
 
-  const [sales, fbf, uni, ask] = await Promise.all([
+  const [sales, fbf, uniware, fcAsk] = await Promise.all([
     readFile(STATE.files[0]),
     readFile(STATE.files[1]),
     readFile(STATE.files[2]),
@@ -131,184 +115,203 @@ async function runEngine() {
 
   setProgress(30);
 
-  /* Uniware Stock */
-  uni.forEach(r => {
-    STATE.uniStock[r['Sku Code']] = +r['Available (ATP)'] || 0;
+  /* ---------- UNIWARE STOCK (BY UNIWARE SKU) ---------- */
+  const uniStock = {};
+  uniware.forEach(r => {
+    uniStock[r['Sku Code']] = +r['Available (ATP)'] || 0;
   });
 
-  /* FK Ask */
-  ask.forEach(r => {
-    const fc = resolveFC(r['FC']);
-    if (!fc) return;
-    STATE.skuUni[r['SKU Id']] = r['Uniware SKU'];
-    STATE.fkAsk[`${r['SKU Id']}|${fc.key}`] = +r['Quantity Sent'] || 0;
+  /* ---------- FK ASK + UNIWARE SKU MAP ---------- */
+  const fkAskMap = {};
+  const skuToUniware = {};
+
+  fcAsk.forEach(r => {
+    const fcObj = resolveFC(r['FC']);
+    if (!fcObj) return;
+
+    const mpSku = r['SKU Id'];
+    const uniSku = r['Uniware SKU'];
+
+    skuToUniware[mpSku] = uniSku;
+    fkAskMap[`${mpSku}|${fcObj.key}`] = +r['Quantity Sent'] || 0;
+    STATE.fcLabels[fcObj.key] = fcObj.label;
   });
 
-  /* Sales */
+  /* ---------- 30D SALE ---------- */
+  const saleMap = {};
+  const fcSaleSummary = {};
+
   sales.forEach(r => {
-    const fc = resolveFC(r['Location Id']);
-    if (!fc) return;
-    const key = `${r['SKU ID']}|${fc.key}`;
-    const q = +r['Gross Units'] || 0;
-    STATE.saleMap[key] = (STATE.saleMap[key] || 0) + q;
-    STATE.fcSale[fc.key] = (STATE.fcSale[fc.key] || 0) + q;
+    const fcObj = resolveFC(r['Location Id']);
+    if (!fcObj) return;
+
+    const mpSku = r['SKU ID'];
+    const qty = +r['Gross Units'] || 0;
+
+    const key = `${mpSku}|${fcObj.key}`;
+    saleMap[key] = (saleMap[key] || 0) + qty;
+    fcSaleSummary[fcObj.key] = (fcSaleSummary[fcObj.key] || 0) + qty;
+
+    STATE.fcLabels[fcObj.key] = fcObj.label;
   });
 
-  /* FBF Stock – SKU LEVEL */
+  STATE.fcSaleSummary = fcSaleSummary;
+
+  /* ---------- FBF STOCK ---------- */
+  const fbfMap = {};
   fbf.forEach(r => {
-    const fc = resolveFC(r['Warehouse Id']);
-    if (!fc) return;
-    const key = `${r['SKU']}|${fc.key}`;
-    const qty = +r['Live on Website'] || 0;
-    STATE.fcStockSku[key] = qty;
-    STATE.fcStock[fc.key] = (STATE.fcStock[fc.key] || 0) + qty;
+    const fcObj = resolveFC(r['Warehouse Id']);
+    if (!fcObj) return;
+
+    fbfMap[`${r['SKU']}|${fcObj.key}`] = +r['Live on Website'] || 0;
+    STATE.fcLabels[fcObj.key] = fcObj.label;
   });
 
-  /* FC Metrics */
-  Object.keys(STATE.fcSale).forEach(fc => {
-    const sale = STATE.fcSale[fc];
-    const stock = STATE.fcStock[fc] || 0;
-    const drr = sale / 30;
-    const sc = drr ? stock / drr : Infinity;
-    STATE.fcMetrics[fc] = { drr, sc };
+  setProgress(60);
+
+  /* ---------- SKU–FC UNIVERSE ---------- */
+  const universe = new Set([
+    ...Object.keys(saleMap),
+    ...Object.keys(fbfMap),
+    ...Object.keys(fkAskMap)
+  ]);
+
+  const fcResults = {};
+
+  universe.forEach(key => {
+    const [mpSku, fcKey] = key.split('|');
+    const uniSku = skuToUniware[mpSku];
+
+    const sale30 = saleMap[key] || 0;
+    const fcStock = fbfMap[key] || 0;
+    const fkAsk = fkAskMap[key] || 0;
+
+    let sent = 0, remark = '', drr = '-', fcSC = '-';
+
+    if (sale30 === 0) {
+      remark = 'No Sale in last 30D';
+    } else {
+      drr = sale30 / 30;
+      fcSC = (fcStock / drr).toFixed(2);
+
+      if (+fcSC >= STATE.config.targetSC) {
+        remark = 'Already sufficient SC';
+      } else if (fkAsk === 0) {
+        remark = 'FK Ask not available';
+      } else if (!uniSku || (uniStock[uniSku] || 0) < STATE.config.minUniware) {
+        remark = 'Uniware stock below threshold';
+      } else {
+        let need = drr * STATE.config.targetSC - fcStock;
+        need = Math.min(
+          need,
+          fkAsk,
+          uniStock[uniSku] - STATE.config.minUniware
+        );
+
+        if (need >= STATE.config.minUniware) {
+          sent = Math.floor(need);
+          uniStock[uniSku] -= sent;
+        } else {
+          remark = 'Uniware stock below threshold';
+        }
+      }
+    }
+
+    if (!fcResults[fcKey]) fcResults[fcKey] = [];
+    fcResults[fcKey].push({
+      'MP SKU': mpSku,
+      '30D Sale': sale30,
+      'FC Stock': fcStock,
+      'FC DRR': drr === '-' ? '-' : drr.toFixed(3),
+      'FC SC': fcSC,
+      'FK Ask': fkAsk,
+      'Sent Qty': sent,
+      'Remarks': sent ? '' : remark
+    });
   });
 
-  buildResults();
-  renderSummary();
+  STATE.results = fcResults;
+
+  renderFCSummary();
+  renderFCSaleSummary();
   renderTabs();
 
   setProgress(100);
+  exportBtn.disabled = false;
 }
 
-/* ================= RESULTS ================= */
-function buildResults() {
-  const keys = new Set([
-    ...Object.keys(STATE.saleMap),
-    ...Object.keys(STATE.fkAsk),
-    ...Object.keys(STATE.fcStockSku)
-  ]);
-
-  keys.forEach(k => {
-    const [sku, fc] = k.split('|');
-    if (!STATE.results[fc]) STATE.results[fc] = [];
-
-    const sale = STATE.saleMap[k] || 0;
-    const stock = STATE.fcStockSku[k] || 0;
-    const drr = sale ? sale / 30 : '-';
-    const sc = drr !== '-' ? (stock / drr).toFixed(1) : '-';
-    const ask = STATE.fkAsk[k] || 0;
-    const uniSku = STATE.skuUni[sku] || '';
-    const uniQty = uniSku ? STATE.uniStock[uniSku] || 0 : 0;
-
-    STATE.results[fc].push({
-      'MP SKU': sku,
-      ...(fc !== 'seller'
-        ? { 'Uniware SKU': uniSku, 'Uniware Stock': uniQty }
-        : {}),
-      '30D Sale': sale,
-      'FC Stock': fc === 'seller' ? 0 : stock,
-      'FC DRR': drr === '-' ? '-' : drr.toFixed(3),
-      'FC SC': sc,
-      'FK Ask': ask,
-      'Sent Qty': 0,
-      'Remarks': sale === 0 ? 'No Sale in last 30D' : ''
-    });
-  });
-}
-
-/* ================= SUMMARY ================= */
-function renderSummary() {
-  const container = document.querySelector('.summary-grid');
-  if (!container) return;
-
-  const fcs = Object.keys(STATE.fcMetrics)
-    .filter(f => f !== 'seller')
-    .sort((a, b) => {
-      if (STATE.fcMetrics[b].drr !== STATE.fcMetrics[a].drr)
-        return STATE.fcMetrics[b].drr - STATE.fcMetrics[a].drr;
-      return STATE.fcMetrics[a].sc - STATE.fcMetrics[b].sc;
-    });
-
-  let html1 = `<h3>FC Performance Summary</h3>
+/* ================= RENDERING ================= */
+function renderFCSummary() {
+  let html = `<h3>FC Performance Summary</h3>
   <table class="zebra center">
-  <tr><th>FC</th><th>FC Stock</th><th>DRR</th><th>SC</th></tr>`;
+    <tr><th>FC</th><th>SKUs</th><th>Total Sent</th></tr>`;
 
-  fcs.forEach(fc => {
-    html1 += `<tr>
-      <td>${FC_MAP[fc].label}</td>
-      <td>${STATE.fcStock[fc] || 0}</td>
-      <td>${STATE.fcMetrics[fc].drr.toFixed(2)}</td>
-      <td>${STATE.fcMetrics[fc].sc.toFixed(1)}</td>
+  Object.keys(STATE.results).forEach(fcKey => {
+    const rows = STATE.results[fcKey];
+    const totalSent = rows.reduce((s, r) => s + r['Sent Qty'], 0);
+    html += `<tr>
+      <td>${STATE.fcLabels[fcKey]}</td>
+      <td>${rows.length}</td>
+      <td>${totalSent}</td>
     </tr>`;
   });
 
-  html1 += '</table>';
+  fcSummaryBox.innerHTML = html + '</table>';
+}
 
-  let html2 = `<h3>FC wise Sale in 30D</h3>
+function renderFCSaleSummary() {
+  let html = `<h3>FC wise Sale in 30D</h3>
   <table class="zebra center">
-  <tr><th>FC</th><th>Sale</th><th>Sale Through %</th></tr>`;
+    <tr><th>FC</th><th>Total Units Sold</th></tr>`;
 
-  fcs.forEach(fc => {
-    const sale = STATE.fcSale[fc] || 0;
-    const stock = STATE.fcStock[fc] || 0;
-    const pct = sale + stock ? (sale / (sale + stock)) * 100 : 0;
-    html2 += `<tr>
-      <td>${FC_MAP[fc].label}</td>
-      <td>${sale}</td>
-      <td>${pct.toFixed(1)}%</td>
+  Object.keys(STATE.fcSaleSummary).forEach(fcKey => {
+    html += `<tr>
+      <td>${STATE.fcLabels[fcKey]}</td>
+      <td>${STATE.fcSaleSummary[fcKey]}</td>
     </tr>`;
   });
 
-  html2 += '</table>';
-
-  container.children[0].innerHTML = html1;
-  container.children[1].innerHTML = html2;
+  fcSaleBox.innerHTML = html + '</table>';
 }
 
-/* ================= TABS ================= */
 function renderTabs() {
-  const tabs = document.querySelector('.tabs');
-  const content = document.querySelector('.tab-content');
-  if (!tabs || !content) return;
+  tabsContainer.innerHTML = '';
+  const fcs = Object.keys(STATE.results);
 
-  tabs.innerHTML = '';
-
-  const ordered = Object.keys(STATE.results).sort((a, b) => {
-    if (a === 'seller') return 1;
-    if (b === 'seller') return -1;
-    const ma = STATE.fcMetrics[a] || { drr: 0, sc: Infinity };
-    const mb = STATE.fcMetrics[b] || { drr: 0, sc: Infinity };
-    if (mb.drr !== ma.drr) return mb.drr - ma.drr;
-    return ma.sc - mb.sc;
-  });
-
-  ordered.forEach((fc, i) => {
+  fcs.forEach((fcKey, idx) => {
     const btn = document.createElement('button');
-    btn.className = 'tab' + (i === 0 ? ' active' : '');
-    btn.textContent = FC_MAP[fc].label;
-    btn.onclick = () => showTab(fc, btn);
-    tabs.appendChild(btn);
+    btn.className = 'tab' + (idx === 0 ? ' active' : '');
+    btn.textContent = STATE.fcLabels[fcKey];
+    btn.onclick = () => showTab(fcKey, btn);
+    tabsContainer.appendChild(btn);
   });
 
-  showTab(ordered[0], tabs.children[0]);
+  showTab(fcs[0], tabsContainer.children[0]);
 }
 
-function showTab(fc, btn) {
+function showTab(fcKey, btn) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
 
-  const rows = STATE.results[fc];
-  if (!rows || !rows.length) return;
-
-  let html = '<table class="zebra center"><tr>';
-  Object.keys(rows[0]).forEach(h => (html += `<th>${h}</th>`));
-  html += '</tr>';
+  const rows = STATE.results[fcKey];
+  let html = `<table class="zebra center"><tr>`;
+  Object.keys(rows[0]).forEach(h => html += `<th>${h}</th>`);
+  html += `</tr>`;
 
   rows.forEach(r => {
-    html += '<tr>';
-    Object.values(r).forEach(v => (html += `<td>${v}</td>`));
-    html += '</tr>';
+    html += `<tr>`;
+    Object.values(r).forEach(v => html += `<td>${v}</td>`);
+    html += `</tr>`;
   });
 
-  document.querySelector('.tab-content').innerHTML = html + '</table>';
+  tabContent.innerHTML = html + '</table>';
 }
+
+/* ================= GENERATE ================= */
+generateBtn.onclick = () => {
+  if (Object.keys(STATE.files).length !== 4) {
+    alert('Please upload all 4 files');
+    return;
+  }
+  runEngine();
+};
