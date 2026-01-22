@@ -15,7 +15,7 @@
   <!-- MAIN CONTAINER -->
   <main class="container">
 
-    <!-- CONFIG PANEL (MOVED TO TOP, ONE-TIME INPUT) -->
+    <!-- CONFIG PANEL -->
     <section class="card collapsible">
       <details open>
         <summary>⚙ Replenishment Settings</summary>
@@ -44,40 +44,40 @@
       </details>
     </section>
 
-    <!-- FILE UPLOAD SECTION (LOCKED UNTIL CONFIG SAVED) -->
-    <section class="card disabled-section" id="fileSection">
+    <!-- FILE UPLOAD SECTION (ACTIVE BY DEFAULT) -->
+    <section class="card" id="fileSection">
       <h2>📁 Input Files</h2>
 
       <div class="file-grid">
         <div class="file-row">
           <label>30D Sale File</label>
-          <input type="file" disabled />
-          <span class="status pending">Waiting for settings</span>
+          <input type="file" />
+          <span class="status">Not uploaded</span>
         </div>
 
         <div class="file-row">
           <label>FBF Stock File</label>
-          <input type="file" disabled />
-          <span class="status pending">Waiting for settings</span>
+          <input type="file" />
+          <span class="status">Not uploaded</span>
         </div>
 
         <div class="file-row">
           <label>Uniware Stock File</label>
-          <input type="file" disabled />
-          <span class="status pending">Waiting for settings</span>
+          <input type="file" />
+          <span class="status">Not uploaded</span>
         </div>
 
         <div class="file-row">
           <label>FC Recommendation File</label>
-          <input type="file" disabled />
-          <span class="status pending">Waiting for settings</span>
+          <input type="file" />
+          <span class="status">Not uploaded</span>
         </div>
       </div>
     </section>
 
     <!-- ACTION BAR -->
     <section class="action-bar">
-      <button class="btn-primary" disabled>Generate Recommendation</button>
+      <button class="btn-primary">Generate Recommendation</button>
       <button class="btn-secondary" disabled>Export All</button>
     </section>
 
@@ -85,7 +85,7 @@
     <section class="card">
       <h3>Processing Status</h3>
       <div class="progress-wrapper">
-        <div class="progress-bar" style="width: 0%;">0%</div>
+        <div class="progress-bar" style="width:0%">0%</div>
       </div>
       <div class="progress-steps">
         <span>Files Loaded</span>
@@ -135,31 +135,30 @@
 
   </main>
 
-  <!-- UI-ONLY SCRIPT (NO LOGIC) -->
+  <!-- UI BEHAVIOR SCRIPT (ONLY FOR SETTINGS ↔ FILE LOCK) -->
   <script>
     const editBtn = document.getElementById('editConfigBtn');
     const saveBtn = document.getElementById('saveConfigBtn');
-    const inputs = document.querySelectorAll('.config-grid input');
+    const configInputs = document.querySelectorAll('.config-grid input');
     const fileSection = document.getElementById('fileSection');
     const fileInputs = fileSection.querySelectorAll('input[type=file]');
-    const statuses = fileSection.querySelectorAll('.status');
 
     editBtn.onclick = () => {
-      inputs.forEach(i => i.disabled = false);
+      configInputs.forEach(i => i.disabled = false);
       saveBtn.disabled = false;
       editBtn.disabled = true;
+
+      fileSection.classList.add('disabled-section');
+      fileInputs.forEach(i => i.disabled = true);
     };
 
     saveBtn.onclick = () => {
-      inputs.forEach(i => i.disabled = true);
+      configInputs.forEach(i => i.disabled = true);
       saveBtn.disabled = true;
       editBtn.disabled = false;
+
       fileSection.classList.remove('disabled-section');
       fileInputs.forEach(i => i.disabled = false);
-      statuses.forEach(s => {
-        s.textContent = 'Not uploaded';
-        s.classList.remove('pending');
-      });
     };
   </script>
 
