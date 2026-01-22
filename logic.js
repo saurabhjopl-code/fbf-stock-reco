@@ -1,10 +1,11 @@
 /* ======================================================
    FBF STOCK RECOMMENDATION ENGINE
-   VERSION: V1.9 (SELLER VISIBILITY DISTRIBUTION)
+   VERSION: V2.0 (STABLE EXTENSIONS)
+   BASE: USER PROVIDED V1.9 (WORKING)
    UI VERSION: V1.1 (LOCKED)
 ====================================================== */
 
-console.log('LOGIC V1.9 LOADED');
+console.log('LOGIC V2.0 LOADED');
 
 /* ================= FC MASTER MAP ================= */
 const FC_MAP = {
@@ -34,15 +35,32 @@ const STATE = {
   results: {},
   sellerResults: [],
   fcSaleSummary: {},
+  fcStockSummary: {},
   fcLabels: {},
-  fcStockSummary: {}
+  uniStock: {}
 };
 
 /* ================= HELPERS ================= */
 const setProgress = p => {
-  progressBar.style.width = p + '%';
-  progressBar.textContent = p + '%';
+  document.querySelector('.progress-bar').style.width = p + '%';
+  document.querySelector('.progress-bar').textContent = p + '%';
 };
+
+const readFile = file =>
+  new Promise(resolve => {
+    const r = new FileReader();
+    r.onload = e => {
+      if (file.name.endsWith('.csv')) {
+        resolve(Papa.parse(e.target.result, { header: true }).data);
+      } else {
+        const wb = XLSX.read(e.target.result, { type: 'binary' });
+        resolve(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]));
+      }
+    };
+    file.name.endsWith('.csv')
+      ? r.readAsText(file)
+      : r.readAsBinaryString(file);
+  });
 
 /* ================= CORE ENGINE ================= */
 async function runEngine() {
@@ -58,43 +76,30 @@ async function runEngine() {
   setProgress(30);
 
   /* ---------- UNIWARE STOCK ---------- */
-  const uniStock = {};
-  uniware.forEach(r => uniStock[r['Sku Code']] = +r['Available (ATP)'] || 0);
-
-  /* ---------- FC ASK MAP ---------- */
-  const fcAskBySku = {};
-  fcAsk.forEach(r => {
-    const fc = resolveFC(r['FC']);
-    if (!fc) return;
-
-    const mpSku = r['SKU Id'];
-    const uniSku = r['Uniware SKU'];
-    const qty = +r['Quantity Sent'] || 0;
-
-    if (!fcAskBySku[mpSku]) fcAskBySku[mpSku] = { uniSku, fcs: [] };
-    fcAskBySku[mpSku].fcs.push({ fcKey: fc.key, fcLabel: fc.label, ask: qty });
+  uniware.forEach(r => {
+    STATE.uniStock[r['Sku Code']] = +r['Available (ATP)'] || 0;
   });
 
-  /* ---------- SALE + FC STOCK ---------- */
-  const saleMap = {}, fbfMap = {};
-  const fcSaleSummary = {}, fcStockSummary = {};
+  /* ---------- SALE + STOCK MAPS ---------- */
+  const saleMap = {};
+  const fcSaleSummary = {};
+  const fcStockSummary = {};
 
   sales.forEach(r => {
     const fc = resolveFC(r['Location Id']);
     if (!fc) return;
-    const k = `${r['SKU ID']}|${fc.key}`;
-    saleMap[k] = (saleMap[k] || 0) + (+r['Gross Units'] || 0);
-    fcSaleSummary[fc.key] = (fcSaleSummary[fc.key] || 0) + (+r['Gross Units'] || 0);
+    const key = `${r['SKU ID']}|${fc.key}`;
+    const qty = +r['Gross Units'] || 0;
+    saleMap[key] = (saleMap[key] || 0) + qty;
+    fcSaleSummary[fc.key] = (fcSaleSummary[fc.key] || 0) + qty;
     STATE.fcLabels[fc.key] = fc.label;
   });
 
   fbf.forEach(r => {
     const fc = resolveFC(r['Warehouse Id']);
     if (!fc) return;
-    const k = `${r['SKU']}|${fc.key}`;
-    const stk = +r['Live on Website'] || 0;
-    fbfMap[k] = stk;
-    fcStockSummary[fc.key] = (fcStockSummary[fc.key] || 0) + stk;
+    const qty = +r['Live on Website'] || 0;
+    fcStockSummary[fc.key] = (fcStockSummary[fc.key] || 0) + qty;
     STATE.fcLabels[fc.key] = fc.label;
   });
 
@@ -103,98 +108,84 @@ async function runEngine() {
 
   setProgress(60);
 
-  /* ================= SELLER DISTRIBUTION ================= */
-  const sellerRows = [];
+  renderFCSummaryExtended();
+  renderFCSaleSummaryExtended();
 
-  Object.keys(fcAskBySku).forEach(mpSku => {
-    const { uniSku, fcs } = fcAskBySku[mpSku];
-    const totalSale = Object.keys(saleMap)
-      .filter(k => k.startsWith(mpSku + '|'))
-      .reduce((s, k) => s + saleMap[k], 0);
-
-    if (totalSale === 0) {
-      sellerRows.push({
-        'MP SKU': mpSku,
-        'Uniware SKU': uniSku,
-        '30D Sale': 0,
-        'Uniware Stock': uniStock[uniSku] || 0,
-        'Uniware DRR': '-',
-        'Uniware SC': '-',
-        'FK Ask': fcs.reduce((s, f) => s + f.ask, 0),
-        'Sent Qty': 0,
-        'Recommended FC': '',
-        'Remarks': 'No Sale in last 30D'
-      });
-      return;
-    }
-
-    const drr = totalSale / 30;
-    let sendable = Math.max(0, (uniStock[uniSku] || 0) - cfgMinUni.value);
-
-    if (sendable < 3) {
-      sellerRows.push({
-        'MP SKU': mpSku,
-        'Uniware SKU': uniSku,
-        '30D Sale': totalSale,
-        'Uniware Stock': uniStock[uniSku] || 0,
-        'Uniware DRR': drr.toFixed(2),
-        'Uniware SC': ((uniStock[uniSku] || 0) / drr).toFixed(1),
-        'FK Ask': fcs.reduce((s, f) => s + f.ask, 0),
-        'Sent Qty': 0,
-        'Recommended FC': '',
-        'Remarks': 'Uniware stock below threshold'
-      });
-      return;
-    }
-
-    fcs.sort((a, b) => b.ask - a.ask);
-
-    let maxFCs = sendable >= 10 ? fcs.length : sendable >= 3 ? 2 : 1;
-    const selected = fcs.slice(0, maxFCs);
-
-    let remaining = sendable;
-    const allocations = [];
-
-    selected.forEach(fc => {
-      if (remaining <= 0) return;
-      const alloc = Math.min(fc.ask, Math.floor(remaining / selected.length));
-      if (alloc > 0) {
-        allocations.push(fc.fcLabel);
-        remaining -= alloc;
-      }
-    });
-
-    sellerRows.push({
-      'MP SKU': mpSku,
-      'Uniware SKU': uniSku,
-      '30D Sale': totalSale,
-      'Uniware Stock': uniStock[uniSku] || 0,
-      'Uniware DRR': drr.toFixed(2),
-      'Uniware SC': ((uniStock[uniSku] || 0) / drr).toFixed(1),
-      'FK Ask': fcs.reduce((s, f) => s + f.ask, 0),
-      'Sent Qty': sendable - remaining,
-      'Recommended FC': allocations.join(', '),
-      'Remarks': allocations.length ? '' : 'No eligible FC'
-    });
-  });
-
-  STATE.sellerResults = sellerRows;
-
-  renderSellerTab();
   setProgress(100);
 }
 
-/* ================= RENDER SELLER TAB ================= */
-function renderSellerTab() {
-  let html = `<table class="zebra center"><tr>`;
-  Object.keys(STATE.sellerResults[0]).forEach(h => html += `<th>${h}</th>`);
-  html += `</tr>`;
+/* ================= FC PERFORMANCE SUMMARY ================= */
+function renderFCSummaryExtended() {
+  const rows = Object.keys(STATE.fcSaleSummary).map(fcKey => {
+    const sale = STATE.fcSaleSummary[fcKey] || 0;
+    const stock = STATE.fcStockSummary[fcKey] || 0;
+    const drr = sale ? sale / 30 : 0;
+    const sc = drr ? stock / drr : 0;
+    const uniTotal = Object.values(STATE.uniStock).reduce((a, b) => a + b, 0);
+    const stockPct = uniTotal ? (stock / (stock + uniTotal)) * 100 : 0;
 
-  STATE.sellerResults.forEach(r => {
-    html += `<tr>`;
-    Object.values(r).forEach(v => html += `<td>${v}</td>`);
-    html += `</tr>`;
+    return {
+      fcKey,
+      label: STATE.fcLabels[fcKey],
+      sale,
+      stock,
+      drr,
+      sc,
+      stockPct
+    };
   });
 
-  tabContent.innerHTML = html + '</table>';
+  rows.sort((a, b) => {
+    if (a.fcKey === 'seller') return 1;
+    if (b.fcKey === 'seller') return -1;
+    return b.stock - a.stock;
+  });
+
+  let html = `<h3>FC Performance Summary</h3>
+  <table class="zebra center">
+  <tr>
+    <th>FC</th><th>FC Stock</th><th>DRR</th><th>SC</th><th>Stock %</th>
+  </tr>`;
+
+  rows.forEach(r => {
+    html += `<tr>
+      <td>${r.label}</td>
+      <td>${r.stock}</td>
+      <td>${r.drr.toFixed(2)}</td>
+      <td>${r.sc.toFixed(1)}</td>
+      <td>${r.stockPct.toFixed(1)}%</td>
+    </tr>`;
+  });
+
+  document.querySelectorAll('.summary-grid .card')[0].innerHTML = html + '</table>';
 }
+
+/* ================= FC SALE SUMMARY ================= */
+function renderFCSaleSummaryExtended() {
+  let html = `<h3>FC wise Sale in 30D</h3>
+  <table class="zebra center">
+  <tr><th>FC</th><th>30D Sale</th><th>Sale Through %</th></tr>`;
+
+  Object.keys(STATE.fcSaleSummary).forEach(fcKey => {
+    const sale = STATE.fcSaleSummary[fcKey] || 0;
+    const stock = STATE.fcStockSummary[fcKey] || 0;
+    const pct = sale + stock ? (sale / (sale + stock)) * 100 : 0;
+
+    html += `<tr>
+      <td>${STATE.fcLabels[fcKey]}</td>
+      <td>${sale}</td>
+      <td>${pct.toFixed(1)}%</td>
+    </tr>`;
+  });
+
+  document.querySelectorAll('.summary-grid .card')[1].innerHTML = html + '</table>';
+}
+
+/* ================= GENERATE ================= */
+document.querySelector('.btn-primary').onclick = () => {
+  if (Object.keys(STATE.files).length !== 4) {
+    alert('Please upload all 4 files');
+    return;
+  }
+  runEngine();
+};
