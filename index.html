@@ -1,56 +1,122 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>FBF Stock Recommendation Engine</title>
-<link rel="stylesheet" href="assets/css/base.css" />
-<link rel="stylesheet" href="assets/css/layout.css" />
-<link rel="stylesheet" href="assets/css/tables.css" />
+  <meta charset="UTF-8" />
+  <title>FBF Stock Recommendation Engine</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
+  <!-- HEADER -->
+  <header class="app-header">
+    <h1>FBF Stock Recommendation Engine</h1>
+  </header>
 
-<h1>FBF Stock Recommendation Engine</h1>
+  <!-- MAIN CONTAINER -->
+  <main class="container">
 
+    <!-- FILE UPLOAD SECTION -->
+    <section class="card">
+      <h2>📁 Input Files</h2>
 
-<div class="top-controls">
-<label>Target SC <input id="targetSC" type="number" value="30"></label>
-<label>Min Uniware <input id="minUni" type="number" value="10"></label>
-<label>Max Return % <input id="maxReturn" type="number" value="30"></label>
-</div>
+      <div class="file-grid">
+        <div class="file-row">
+          <label>30D Sale File</label>
+          <input type="file" />
+          <span class="status pending">Not uploaded</span>
+        </div>
 
+        <div class="file-row">
+          <label>FBF Stock File</label>
+          <input type="file" />
+          <span class="status pending">Not uploaded</span>
+        </div>
 
-<div class="file-controls">
-<input type="file" id="saleFile" />
-<input type="file" id="fbfFile" />
-<input type="file" id="uniFile" />
-<input type="file" id="fcAskFile" />
-<button id="generateBtn">Generate</button>
-<button id="exportAllBtn" disabled>Export All</button>
-</div>
+        <div class="file-row">
+          <label>Uniware Stock File</label>
+          <input type="file" />
+          <span class="status pending">Not uploaded</span>
+        </div>
 
+        <div class="file-row">
+          <label>FC Recommendation File</label>
+          <input type="file" />
+          <span class="status pending">Not uploaded</span>
+        </div>
+      </div>
+    </section>
 
-<div id="progress"><div id="bar"></div></div>
+    <!-- ACTION BAR -->
+    <section class="action-bar">
+      <button class="btn-primary">Generate Recommendation</button>
+      <button class="btn-secondary" disabled>Export All</button>
+    </section>
 
+    <!-- CONFIG PANEL -->
+    <section class="card collapsible">
+      <details>
+        <summary>⚙ Replenishment Settings</summary>
 
-<div class="summary">
-<div id="fcSummary"></div>
-<div id="topSku"></div>
-</div>
+        <div class="config-grid">
+          <div>
+            <label>Target Stock Cover (Days)</label>
+            <input type="number" value="30" />
+          </div>
 
+          <div>
+            <label>Minimum Uniware Balance</label>
+            <input type="number" value="10" />
+          </div>
 
-<div id="tabs"></div>
+          <div>
+            <label>Max Allowed Return %</label>
+            <input type="number" value="30" />
+          </div>
+        </div>
+      </details>
+    </section>
 
+    <!-- RESULTS SECTION -->
+    <section class="results">
 
-<script src="assets/libs/xlsx.full.min.js"></script>
-<script src="assets/libs/papaparse.min.js"></script>
-<script src="assets/js/config.js"></script>
-<script src="assets/js/parser.js"></script>
-<script src="assets/js/engine.js"></script>
-<script src="assets/js/ui.js"></script>
-<script src="assets/js/export.js"></script>
-<script src="assets/js/main.js"></script>
+      <!-- SUMMARY ROW -->
+      <div class="summary-grid">
+        <div class="card">
+          <h3>FC Performance Summary</h3>
+          <div class="placeholder">Results will appear here after generation</div>
+        </div>
 
+        <div class="card">
+          <h3>Top 10 Selling SKUs</h3>
+          <div class="placeholder">Results will appear here after generation</div>
+        </div>
+      </div>
+
+      <!-- FC TABS -->
+      <div class="card">
+        <div class="tabs">
+          <button class="tab active">Uluberia</button>
+          <button class="tab">Bhiwandi</button>
+          <button class="tab">Malur</button>
+          <button class="tab">Hyderabad</button>
+          <button class="tab">Lucknow</button>
+          <button class="tab">Seller</button>
+        </div>
+
+        <div class="tab-content">
+          <div class="export-row">
+            <button class="btn-secondary">Export This FC</button>
+          </div>
+
+          <div class="placeholder">
+            FC-wise recommendation table will appear here
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
 
 </body>
 </html>
