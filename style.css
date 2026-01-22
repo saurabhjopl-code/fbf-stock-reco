@@ -228,3 +228,13 @@ table.zebra tr:nth-child(even) {
 table.zebra td:nth-child(n+3) {
   text-align: right;
 }
+/* CENTER ALIGN ALL TABLES */
+table.center th,
+table.center td {
+  text-align: center !important;
+}
+
+/* KEEP ZEBRA */
+table.zebra tr:nth-child(even) {
+  background: #fafafa;
+}
