@@ -99,6 +99,34 @@ body {
   cursor: not-allowed;
 }
 
+/* PROGRESS BAR */
+.progress-wrapper {
+  width: 100%;
+  background: #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 10px 0;
+}
+
+.progress-bar {
+  height: 24px;
+  background: linear-gradient(90deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  line-height: 24px;
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+.progress-steps {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #6b7280;
+}
+
 /* CONFIG */
 .collapsible summary {
   font-weight: 600;
