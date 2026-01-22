@@ -1,14 +1,11 @@
 /* ======================================================
    FBF STOCK RECOMMENDATION ENGINE
-   VERSION: V1.2 (FULL ENGINE + RENDERING)
+   VERSION: V1.3 (CALCULATION FIX)
    UI VERSION: V1.1 (LOCKED)
 ====================================================== */
 
-console.log('LOGIC V1.2 LOADED');
+console.log('LOGIC V1.3 LOADED');
 
-/* ===============================
-   GLOBAL STATE
-================================ */
 const STATE = {
   config: {},
   files: {},
@@ -16,9 +13,7 @@ const STATE = {
   sellerResults: []
 };
 
-/* ===============================
-   ELEMENTS
-================================ */
+/* ELEMENTS */
 const progressBar = document.querySelector('.progress-bar');
 const generateBtn = document.querySelector('.action-bar .btn-primary');
 const exportBtn = document.querySelector('.action-bar .btn-secondary');
@@ -28,9 +23,7 @@ const topSkuBox = document.querySelectorAll('.summary-grid .card')[1];
 const tabsContainer = document.querySelector('.tabs');
 const tabContent = document.querySelector('.tab-content');
 
-/* ===============================
-   HELPERS
-================================ */
+/* HELPERS */
 function setProgress(p) {
   progressBar.style.width = p + '%';
   progressBar.textContent = p + '%';
@@ -38,9 +31,9 @@ function setProgress(p) {
 
 function readConfig() {
   STATE.config = {
-    targetSC: +document.getElementById('cfgTargetSC').value,
-    minUniware: +document.getElementById('cfgMinUni').value,
-    maxReturn: +document.getElementById('cfgMaxReturn').value
+    targetSC: +cfgTargetSC.value,
+    minUniware: +cfgMinUni.value,
+    maxReturn: +cfgMaxReturn.value
   };
 }
 
@@ -62,26 +55,20 @@ function readFile(file) {
   });
 }
 
-/* ===============================
-   FILE UPLOAD (LOCKED)
-================================ */
+/* FILE UPLOAD */
 document.querySelectorAll('#fileSection .file-row')
   .forEach((row, idx) => {
     const input = row.querySelector('input[type=file]');
     const status = row.querySelector('.status');
-
     input.addEventListener('change', () => {
       if (!input.files.length) return;
       STATE.files[idx] = input.files[0];
       status.textContent = 'Uploaded';
       status.style.color = '#16a34a';
-      status.title = input.files[0].name;
     });
   });
 
-/* ===============================
-   CORE ENGINE
-================================ */
+/* CORE ENGINE */
 async function runEngine() {
   readConfig();
   setProgress(10);
@@ -95,22 +82,18 @@ async function runEngine() {
 
   setProgress(25);
 
-  /* ---------- UNIWARE STOCK ---------- */
   const uniStock = {};
   uniware.forEach(r => {
     uniStock[r['Sku Code']] = +r['Available (ATP)'] || 0;
   });
 
-  /* ---------- SALES MAP ---------- */
   const saleMap = {};
   sales.forEach(r => {
     const key = `${r['SKU ID']}|${r['Location Id']}`;
-    if (!saleMap[key]) saleMap[key] = { gross: 0, ret: 0 };
-    saleMap[key].gross += +r['Gross Units'] || 0;
-    saleMap[key].ret += +r['Return Units'] || 0;
+    if (!saleMap[key]) saleMap[key] = 0;
+    saleMap[key] += +r['Gross Units'] || 0;
   });
 
-  /* ---------- FBF STOCK ---------- */
   const fbfMap = {};
   fbf.forEach(r => {
     if (+r['Live on Website'] > 0) {
@@ -121,9 +104,8 @@ async function runEngine() {
 
   setProgress(50);
 
-  /* ---------- FC ITEMS ---------- */
-  const fcItems = [];
-  const skuFcRank = {};
+  const fcResults = {};
+  const skuAgg = {};
 
   fcAsk.forEach(r => {
     const sku = r['SKU Id'];
@@ -132,149 +114,94 @@ async function runEngine() {
     const fkAsk = +r['Quantity Sent'] || 0;
 
     const key = `${sku}|${fc}`;
-    const gross = saleMap[key]?.gross || 0;
-    const ret = saleMap[key]?.ret || 0;
+    const sale30 = saleMap[key] || 0;
     const fcStock = fbfMap[key] || 0;
 
-    const drr = gross / 30;
-    const fcSC = drr ? fcStock / drr : 999;
-    const retPct = gross ? (ret / gross) * 100 : 0;
-
-    if (!skuFcRank[sku]) skuFcRank[sku] = [];
-    skuFcRank[sku].push({ fc, drr, fcSC });
-
-    fcItems.push({
-      sku, uniSku, fc, gross, retPct,
-      drr, fcStock, fcSC, fkAsk
-    });
-  });
-
-  fcItems.sort((a, b) =>
-    b.drr - a.drr || a.fcSC - b.fcSC
-  );
-
-  setProgress(75);
-
-  /* ---------- FC ALLOCATION ---------- */
-  const fcResults = {};
-
-  fcItems.forEach(i => {
-    if (!fcResults[i.fc]) fcResults[i.fc] = [];
+    const drr = sale30 / 30;
+    const fcSC = drr > 0 ? (fcStock / drr) : 0;
 
     let sent = 0;
     let remark = '';
 
-    if (i.retPct > STATE.config.maxReturn) {
-      remark = 'Return % exceeds limit';
-    } else if (i.fcSC >= STATE.config.targetSC) {
+    if (sale30 === 0) {
+      remark = 'No sale in last 30D';
+    } else if (fcSC >= STATE.config.targetSC) {
       remark = 'Already sufficient SC';
-    } else if ((uniStock[i.uniSku] || 0) < STATE.config.minUniware) {
+    } else if ((uniStock[uniSku] || 0) < STATE.config.minUniware) {
       remark = 'Uniware stock below threshold';
     } else {
-      let need = i.drr * STATE.config.targetSC - i.fcStock;
-      need = Math.min(need, i.fkAsk);
-      need = Math.min(need, uniStock[i.uniSku] - STATE.config.minUniware);
-
+      let need = drr * STATE.config.targetSC - fcStock;
+      need = Math.min(need, fkAsk);
+      need = Math.min(need, uniStock[uniSku] - STATE.config.minUniware);
       if (need >= STATE.config.minUniware) {
         sent = Math.floor(need);
-        uniStock[i.uniSku] -= sent;
+        uniStock[uniSku] -= sent;
       } else {
         remark = 'Uniware stock below threshold';
       }
     }
 
-    fcResults[i.fc].push({
-      'MP SKU': i.sku,
-      'Uniware SKU': i.uniSku,
-      '30D Sale': i.gross,
-      'FC Stock': i.fcStock,
-      'FC DRR': i.drr.toFixed(2),
-      'FC SC': i.fcSC.toFixed(1),
-      'FK Ask': i.fkAsk,
+    if (!fcResults[fc]) fcResults[fc] = [];
+    fcResults[fc].push({
+      'MP SKU': sku,
+      'Uniware SKU': uniSku,
+      '30D Sale': sale30,
+      'FC Stock': fcStock,
+      'FC DRR': drr.toFixed(2),
+      'FC SC': drr ? fcSC.toFixed(1) : '-',
+      'FK Ask': fkAsk,
       'Sent Qty': sent,
       'Remarks': sent ? '' : remark
     });
-  });
 
-  /* ---------- SELLER LOGIC ---------- */
-  const sellerRows = [];
-
-  Object.keys(uniStock).forEach(uniSku => {
-    if (uniStock[uniSku] < STATE.config.minUniware) return;
-
-    const skuSales = sales.filter(r => r['Uniware SKU'] === uniSku);
-    const totalSale = skuSales.reduce((s, r) => s + (+r['Gross Units'] || 0), 0);
-    if (!totalSale) return;
-
-    const drr = totalSale / 30;
-    let need = drr * STATE.config.targetSC;
-    need = Math.min(need, uniStock[uniSku] - STATE.config.minUniware);
-    if (need < STATE.config.minUniware) return;
-
-    const mpSku = skuSales[0]['SKU ID'];
-    const bestFC =
-      (skuFcRank[mpSku] || [])
-        .sort((a, b) => b.drr - a.drr || a.fcSC - b.fcSC)[0]?.fc || 'N/A';
-
-    sellerRows.push({
-      'MP SKU': mpSku,
-      'Uniware SKU': uniSku,
-      '30D Sale': totalSale,
-      'Uniware DRR': drr.toFixed(2),
-      'Uniware Stock': uniStock[uniSku],
-      'Sent Qty': Math.floor(need),
-      'Recommended FC': bestFC,
-      'Remarks': ''
-    });
-
-    uniStock[uniSku] -= Math.floor(need);
+    if (!skuAgg[sku]) skuAgg[sku] = 0;
+    skuAgg[sku] += sale30;
   });
 
   STATE.results = fcResults;
-  STATE.sellerResults = sellerRows;
+
+  /* RENDER */
+  renderFCSummary(fcResults);
+  renderTop10(skuAgg);
+  renderTabs(fcResults);
 
   setProgress(100);
   exportBtn.disabled = false;
-
-  renderAll();
 }
 
-/* ===============================
-   RENDERING
-================================ */
-function renderAll() {
-  renderFCSummary();
-  renderTop10();
-  renderTabs();
-}
-
-function renderFCSummary() {
-  let html = '<h3>FC Performance Summary</h3><table><tr><th>FC</th><th>SKUs</th><th>Total Sent</th></tr>';
-  Object.keys(STATE.results).forEach(fc => {
-    const rows = STATE.results[fc];
-    const total = rows.reduce((s, r) => s + r['Sent Qty'], 0);
-    html += `<tr><td>${fc}</td><td>${rows.length}</td><td>${total}</td></tr>`;
+/* RENDER FUNCTIONS */
+function renderFCSummary(results) {
+  let html = `<h3>FC Performance Summary</h3>
+  <table class="zebra">
+  <tr><th>FC</th><th>SKUs</th><th>Total Sent</th></tr>`;
+  Object.keys(results).forEach(fc => {
+    const rows = results[fc];
+    const sent = rows.reduce((s, r) => s + r['Sent Qty'], 0);
+    html += `<tr><td>${fc}</td><td>${rows.length}</td><td>${sent}</td></tr>`;
   });
-  html += '</table>';
+  html += `</table>`;
   fcSummaryBox.innerHTML = html;
 }
 
-function renderTop10() {
-  const all = [];
-  Object.values(STATE.results).forEach(rows => rows.forEach(r => all.push(r)));
-  all.sort((a, b) => b['30D Sale'] - a['30D Sale']);
+function renderTop10(agg) {
+  const top = Object.entries(agg)
+    .filter(([,v]) => v > 0)
+    .sort((a,b) => b[1] - a[1])
+    .slice(0,10);
 
-  let html = '<h3>Top 10 Selling SKUs</h3><table><tr><th>SKU</th><th>30D Sale</th><th>Sent</th></tr>';
-  all.slice(0, 10).forEach(r => {
-    html += `<tr><td>${r['MP SKU']}</td><td>${r['30D Sale']}</td><td>${r['Sent Qty']}</td></tr>`;
+  let html = `<h3>Top 10 Selling SKUs</h3>
+  <table class="zebra">
+  <tr><th>SKU</th><th>30D Sale</th></tr>`;
+  top.forEach(([sku, sale]) => {
+    html += `<tr><td>${sku}</td><td>${sale}</td></tr>`;
   });
-  html += '</table>';
+  html += `</table>`;
   topSkuBox.innerHTML = html;
 }
 
-function renderTabs() {
+function renderTabs(results) {
   tabsContainer.innerHTML = '';
-  const fcs = Object.keys(STATE.results).concat('Seller');
+  const fcs = Object.keys(results);
 
   fcs.forEach((fc, idx) => {
     const btn = document.createElement('button');
@@ -283,7 +210,6 @@ function renderTabs() {
     btn.onclick = () => showTab(fc, btn);
     tabsContainer.appendChild(btn);
   });
-
   showTab(fcs[0], tabsContainer.children[0]);
 }
 
@@ -291,32 +217,28 @@ function showTab(fc, btn) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
 
-  const rows = fc === 'Seller' ? STATE.sellerResults : STATE.results[fc];
-  if (!rows || !rows.length) {
-    tabContent.innerHTML = '<div class="placeholder">No data available</div>';
+  const rows = STATE.results[fc];
+  if (!rows.length) {
+    tabContent.innerHTML = '<div class="placeholder">No data</div>';
     return;
   }
 
-  let html = '<table><tr>';
+  let html = `<table class="zebra"><tr>`;
   Object.keys(rows[0]).forEach(h => html += `<th>${h}</th>`);
-  html += '</tr>';
-
+  html += `</tr>`;
   rows.forEach(r => {
-    html += '<tr>';
+    html += `<tr>`;
     Object.values(r).forEach(v => html += `<td>${v}</td>`);
-    html += '</tr>';
+    html += `</tr>`;
   });
-
-  html += '</table>';
+  html += `</table>`;
   tabContent.innerHTML = html;
 }
 
-/* ===============================
-   GENERATE
-================================ */
+/* GENERATE */
 generateBtn.addEventListener('click', () => {
   if (Object.keys(STATE.files).length !== 4) {
-    alert('Please upload all 4 required files.');
+    alert('Please upload all 4 files.');
     return;
   }
   runEngine();
