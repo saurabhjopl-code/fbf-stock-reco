@@ -1,1 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>FBF Stock Recommendation</title>
+<link rel="stylesheet" href="assets/css/base.css" />
+<link rel="stylesheet" href="assets/css/layout.css" />
+<link rel="stylesheet" href="assets/css/tables.css" />
+</head>
+<body>
+<header>
+<h1>FBF Stock Recommendation Engine</h1>
+<div id="config-panel">
+<label>Target SC <input type="number" id="cfgTargetSC" value="30" /></label>
+<label>Min Uniware <input type="number" id="cfgMinUni" value="10" /></label>
+<label>Max Return % <input type="number" id="cfgMaxReturn" value="30" /></label>
+</div>
+</header>
 
+
+<section class="controls">
+<input type="file" id="saleFile" />
+<input type="file" id="fbfFile" />
+<input type="file" id="uniFile" />
+<input type="file" id="fcRecoFile" />
+<button id="generateBtn">Generate</button>
+<button id="exportAllBtn" disabled>Export All</button>
+</section>
+
+
+<div id="progress"><div id="progressBar"></div></div>
+
+
+<section class="summary">
+<div id="fcSummary"></div>
+<div id="topSku"></div>
+</section>
+
+
+<section id="fcTabs"></section>
+
+
+<script src="assets/libs/xlsx.full.min.js"></script>
+<script src="assets/libs/papaparse.min.js"></script>
+
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/validators.js"></script>
+<script src="assets/js/parsers.js"></script>
+<script src="assets/js/consolidator.js"></script>
+<script src="assets/js/metrics.js"></script>
+<script src="assets/js/priorityEngine.js"></script>
+<script src="assets/js/recommender.js"></script>
+<script src="assets/js/uiRenderer.js"></script>
+<script src="assets/js/exporter.js"></script>
+<script src="assets/js/main.js"></script>
+</body>
+</html>
