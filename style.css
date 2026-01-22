@@ -132,7 +132,7 @@ body {
   background: #e5e7eb;
   border-radius: 6px;
   overflow: hidden;
-  margin: 10px 0;
+  margin: 10px 0 14px 0;
 }
 
 .progress-bar {
@@ -144,6 +144,20 @@ body {
   text-align: center;
   line-height: 24px;
   transition: width 0.3s ease;
+}
+
+/* 🔧 FIXED PROGRESS STEPS */
+.progress-steps {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: #6b7280;
+  flex-wrap: wrap;
+}
+
+.progress-steps span {
+  white-space: nowrap;
 }
 
 /* RESULTS */
