@@ -1,30 +1,30 @@
 /* ======================================================
    FBF STOCK RECOMMENDATION ENGINE
-   VERSION: V1.7 (EXPLICIT FC MAPPING)
+   VERSION: V1.8 (UNIWARE SKU FIX)
    UI VERSION: V1.1 (LOCKED)
 ====================================================== */
 
-console.log('LOGIC V1.7 LOADED');
+console.log('LOGIC V1.8 LOADED');
 
 /* ================= FC MASTER MAP ================= */
 const FC_MAP = {
-  'ulub_bts':              { key: 'kolkata',   label: 'Kolkata' },
-  'kolkata_uluberia_bts':  { key: 'kolkata',   label: 'Kolkata' },
+  'ulub_bts': { key: 'kolkata', label: 'Kolkata' },
+  'kolkata_uluberia_bts': { key: 'kolkata', label: 'Kolkata' },
 
-  'malur_bts':             { key: 'bangalore', label: 'Bangalore' },
-  'malur_bts_warehouse':   { key: 'bangalore', label: 'Bangalore' },
+  'malur_bts': { key: 'bangalore', label: 'Bangalore' },
+  'malur_bts_warehouse': { key: 'bangalore', label: 'Bangalore' },
 
-  'bhi_vas_wh_nl_01nl':    { key: 'mumbai',    label: 'Mumbai' },
-  'bhiwandi_bts':          { key: 'mumbai',    label: 'Mumbai' },
+  'bhi_vas_wh_nl_01nl': { key: 'mumbai', label: 'Mumbai' },
+  'bhiwandi_bts': { key: 'mumbai', label: 'Mumbai' },
 
-  'gur_san_wh_nl_01nl':    { key: 'sanpka',    label: 'Sanpka' },
-  'sanpka_01':             { key: 'sanpka',    label: 'Sanpka' },
+  'gur_san_wh_nl_01nl': { key: 'sanpka', label: 'Sanpka' },
+  'sanpka_01': { key: 'sanpka', label: 'Sanpka' },
 
-  'hyderabad_medchal_01':  { key: 'hyderabad', label: 'Hyderabad' },
-  'luc_has_wh_nl_02nl':    { key: 'lucknow',   label: 'Lucknow' },
+  'hyderabad_medchal_01': { key: 'hyderabad', label: 'Hyderabad' },
+  'luc_has_wh_nl_02nl': { key: 'lucknow', label: 'Lucknow' },
 
   'loc979d1d9aca154ae0a5d72fc1a199aece': { key: 'seller', label: 'Seller' },
-  'na':                    { key: 'seller',   label: 'Seller' }
+  'na': { key: 'seller', label: 'Seller' }
 };
 
 function normalizeRaw(v) {
@@ -115,13 +115,29 @@ async function runEngine() {
 
   setProgress(30);
 
-  /* ---------- UNIWARE STOCK ---------- */
+  /* ---------- UNIWARE STOCK (BY UNIWARE SKU) ---------- */
   const uniStock = {};
   uniware.forEach(r => {
     uniStock[r['Sku Code']] = +r['Available (ATP)'] || 0;
   });
 
-  /* ---------- SALE MAP + FC SALE SUMMARY ---------- */
+  /* ---------- FK ASK + UNIWARE SKU MAP ---------- */
+  const fkAskMap = {};
+  const skuToUniware = {};
+
+  fcAsk.forEach(r => {
+    const fcObj = resolveFC(r['FC']);
+    if (!fcObj) return;
+
+    const mpSku = r['SKU Id'];
+    const uniSku = r['Uniware SKU'];
+
+    skuToUniware[mpSku] = uniSku;
+    fkAskMap[`${mpSku}|${fcObj.key}`] = +r['Quantity Sent'] || 0;
+    STATE.fcLabels[fcObj.key] = fcObj.label;
+  });
+
+  /* ---------- 30D SALE ---------- */
   const saleMap = {};
   const fcSaleSummary = {};
 
@@ -129,14 +145,14 @@ async function runEngine() {
     const fcObj = resolveFC(r['Location Id']);
     if (!fcObj) return;
 
-    STATE.fcLabels[fcObj.key] = fcObj.label;
-
-    const sku = r['SKU ID'];
+    const mpSku = r['SKU ID'];
     const qty = +r['Gross Units'] || 0;
-    const key = `${sku}|${fcObj.key}`;
 
+    const key = `${mpSku}|${fcObj.key}`;
     saleMap[key] = (saleMap[key] || 0) + qty;
     fcSaleSummary[fcObj.key] = (fcSaleSummary[fcObj.key] || 0) + qty;
+
+    STATE.fcLabels[fcObj.key] = fcObj.label;
   });
 
   STATE.fcSaleSummary = fcSaleSummary;
@@ -147,28 +163,13 @@ async function runEngine() {
     const fcObj = resolveFC(r['Warehouse Id']);
     if (!fcObj) return;
 
+    fbfMap[`${r['SKU']}|${fcObj.key}`] = +r['Live on Website'] || 0;
     STATE.fcLabels[fcObj.key] = fcObj.label;
-
-    if (+r['Live on Website'] > 0) {
-      fbfMap[`${r['SKU']}|${fcObj.key}`] = +r['Live on Website'];
-    }
-  });
-
-  /* ---------- FK ASK ---------- */
-  const fkAskMap = {};
-  fcAsk.forEach(r => {
-    const fcObj = resolveFC(r['FC']);
-    if (!fcObj) return;
-
-    STATE.fcLabels[fcObj.key] = fcObj.label;
-
-    fkAskMap[`${r['SKU Id']}|${fcObj.key}`] =
-      +r['Quantity Sent'] || 0;
   });
 
   setProgress(60);
 
-  /* ---------- FULL SKU–FC UNIVERSE ---------- */
+  /* ---------- SKU–FC UNIVERSE ---------- */
   const universe = new Set([
     ...Object.keys(saleMap),
     ...Object.keys(fbfMap),
@@ -178,7 +179,8 @@ async function runEngine() {
   const fcResults = {};
 
   universe.forEach(key => {
-    const [sku, fcKey] = key.split('|');
+    const [mpSku, fcKey] = key.split('|');
+    const uniSku = skuToUniware[mpSku];
 
     const sale30 = saleMap[key] || 0;
     const fcStock = fbfMap[key] || 0;
@@ -190,21 +192,25 @@ async function runEngine() {
       remark = 'No Sale in last 30D';
     } else {
       drr = sale30 / 30;
-      fcSC = (fcStock / drr).toFixed(1);
+      fcSC = (fcStock / drr).toFixed(2);
 
       if (+fcSC >= STATE.config.targetSC) {
         remark = 'Already sufficient SC';
       } else if (fkAsk === 0) {
         remark = 'FK Ask not available';
-      } else if ((uniStock[sku] || 0) < STATE.config.minUniware) {
+      } else if (!uniSku || (uniStock[uniSku] || 0) < STATE.config.minUniware) {
         remark = 'Uniware stock below threshold';
       } else {
         let need = drr * STATE.config.targetSC - fcStock;
-        need = Math.min(need, fkAsk, uniStock[sku] - STATE.config.minUniware);
+        need = Math.min(
+          need,
+          fkAsk,
+          uniStock[uniSku] - STATE.config.minUniware
+        );
 
         if (need >= STATE.config.minUniware) {
           sent = Math.floor(need);
-          uniStock[sku] -= sent;
+          uniStock[uniSku] -= sent;
         } else {
           remark = 'Uniware stock below threshold';
         }
@@ -213,10 +219,10 @@ async function runEngine() {
 
     if (!fcResults[fcKey]) fcResults[fcKey] = [];
     fcResults[fcKey].push({
-      'MP SKU': sku,
+      'MP SKU': mpSku,
       '30D Sale': sale30,
       'FC Stock': fcStock,
-      'FC DRR': drr === '-' ? '-' : drr.toFixed(2),
+      'FC DRR': drr === '-' ? '-' : drr.toFixed(3),
       'FC SC': fcSC,
       'FK Ask': fkAsk,
       'Sent Qty': sent,
