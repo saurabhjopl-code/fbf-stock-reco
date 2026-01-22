@@ -1,16 +1,52 @@
 /* ======================================================
    FBF STOCK RECOMMENDATION ENGINE
-   VERSION: V1.6 (FULL FC NORMALIZATION)
+   VERSION: V1.7 (EXPLICIT FC MAPPING)
    UI VERSION: V1.1 (LOCKED)
 ====================================================== */
 
-console.log('LOGIC V1.6 LOADED');
+console.log('LOGIC V1.7 LOADED');
 
+/* ================= FC MASTER MAP ================= */
+const FC_MAP = {
+  'ulub_bts':              { key: 'kolkata',   label: 'Kolkata' },
+  'kolkata_uluberia_bts':  { key: 'kolkata',   label: 'Kolkata' },
+
+  'malur_bts':             { key: 'bangalore', label: 'Bangalore' },
+  'malur_bts_warehouse':   { key: 'bangalore', label: 'Bangalore' },
+
+  'bhi_vas_wh_nl_01nl':    { key: 'mumbai',    label: 'Mumbai' },
+  'bhiwandi_bts':          { key: 'mumbai',    label: 'Mumbai' },
+
+  'gur_san_wh_nl_01nl':    { key: 'sanpka',    label: 'Sanpka' },
+  'sanpka_01':             { key: 'sanpka',    label: 'Sanpka' },
+
+  'hyderabad_medchal_01':  { key: 'hyderabad', label: 'Hyderabad' },
+  'luc_has_wh_nl_02nl':    { key: 'lucknow',   label: 'Lucknow' },
+
+  'loc979d1d9aca154ae0a5d72fc1a199aece': { key: 'seller', label: 'Seller' },
+  'na':                    { key: 'seller',   label: 'Seller' }
+};
+
+function normalizeRaw(v) {
+  return String(v || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+}
+
+function resolveFC(raw) {
+  const n = normalizeRaw(raw);
+  return FC_MAP[n] || null;
+}
+
+/* ================= GLOBAL STATE ================= */
 const STATE = {
   config: {},
   files: {},
   results: {},
-  fcSaleSummary: {}
+  fcSaleSummary: {},
+  fcLabels: {}
 };
 
 /* ================= ELEMENTS ================= */
@@ -24,14 +60,6 @@ const tabsContainer = document.querySelector('.tabs');
 const tabContent = document.querySelector('.tab-content');
 
 /* ================= HELPERS ================= */
-function normalizeFC(v) {
-  return String(v || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_|_$/g, '');
-}
-
 function setProgress(p) {
   progressBar.style.width = p + '%';
   progressBar.textContent = p + '%';
@@ -47,8 +75,8 @@ function readConfig() {
 
 function readFile(file) {
   return new Promise(resolve => {
-    const reader = new FileReader();
-    reader.onload = e => {
+    const r = new FileReader();
+    r.onload = e => {
       if (file.name.endsWith('.csv')) {
         resolve(Papa.parse(e.target.result, { header: true }).data);
       } else {
@@ -57,8 +85,8 @@ function readFile(file) {
       }
     };
     file.name.endsWith('.csv')
-      ? reader.readAsText(file)
-      : reader.readAsBinaryString(file);
+      ? r.readAsText(file)
+      : r.readAsBinaryString(file);
   });
 }
 
@@ -87,44 +115,55 @@ async function runEngine() {
 
   setProgress(30);
 
-  /* ---------- UNIWARE STOCK (SKU LEVEL) ---------- */
+  /* ---------- UNIWARE STOCK ---------- */
   const uniStock = {};
   uniware.forEach(r => {
     uniStock[r['Sku Code']] = +r['Available (ATP)'] || 0;
   });
 
-  /* ---------- 30D SALE MAP + FC SUMMARY ---------- */
+  /* ---------- SALE MAP + FC SALE SUMMARY ---------- */
   const saleMap = {};
   const fcSaleSummary = {};
 
   sales.forEach(r => {
-    const sku = r['SKU ID'];
-    const fc = normalizeFC(r['Location Id']);
-    const qty = +r['Gross Units'] || 0;
+    const fcObj = resolveFC(r['Location Id']);
+    if (!fcObj) return;
 
-    const key = `${sku}|${fc}`;
+    STATE.fcLabels[fcObj.key] = fcObj.label;
+
+    const sku = r['SKU ID'];
+    const qty = +r['Gross Units'] || 0;
+    const key = `${sku}|${fcObj.key}`;
+
     saleMap[key] = (saleMap[key] || 0) + qty;
-    fcSaleSummary[fc] = (fcSaleSummary[fc] || 0) + qty;
+    fcSaleSummary[fcObj.key] = (fcSaleSummary[fcObj.key] || 0) + qty;
   });
 
   STATE.fcSaleSummary = fcSaleSummary;
 
-  /* ---------- FBF STOCK MAP ---------- */
+  /* ---------- FBF STOCK ---------- */
   const fbfMap = {};
   fbf.forEach(r => {
+    const fcObj = resolveFC(r['Warehouse Id']);
+    if (!fcObj) return;
+
+    STATE.fcLabels[fcObj.key] = fcObj.label;
+
     if (+r['Live on Website'] > 0) {
-      const sku = r['SKU'];
-      const fc = normalizeFC(r['Warehouse Id']);
-      fbfMap[`${sku}|${fc}`] = +r['Live on Website'];
+      fbfMap[`${r['SKU']}|${fcObj.key}`] = +r['Live on Website'];
     }
   });
 
-  /* ---------- FK ASK MAP ---------- */
+  /* ---------- FK ASK ---------- */
   const fkAskMap = {};
   fcAsk.forEach(r => {
-    const sku = r['SKU Id'];
-    const fc = normalizeFC(r['FC']);
-    fkAskMap[`${sku}|${fc}`] = +r['Quantity Sent'] || 0;
+    const fcObj = resolveFC(r['FC']);
+    if (!fcObj) return;
+
+    STATE.fcLabels[fcObj.key] = fcObj.label;
+
+    fkAskMap[`${r['SKU Id']}|${fcObj.key}`] =
+      +r['Quantity Sent'] || 0;
   });
 
   setProgress(60);
@@ -139,16 +178,13 @@ async function runEngine() {
   const fcResults = {};
 
   universe.forEach(key => {
-    const [sku, fc] = key.split('|');
+    const [sku, fcKey] = key.split('|');
 
     const sale30 = saleMap[key] || 0;
     const fcStock = fbfMap[key] || 0;
     const fkAsk = fkAskMap[key] || 0;
 
-    let sent = 0;
-    let remark = '';
-    let drr = '-';
-    let fcSC = '-';
+    let sent = 0, remark = '', drr = '-', fcSC = '-';
 
     if (sale30 === 0) {
       remark = 'No Sale in last 30D';
@@ -175,8 +211,8 @@ async function runEngine() {
       }
     }
 
-    if (!fcResults[fc]) fcResults[fc] = [];
-    fcResults[fc].push({
+    if (!fcResults[fcKey]) fcResults[fcKey] = [];
+    fcResults[fcKey].push({
       'MP SKU': sku,
       '30D Sale': sale30,
       'FC Stock': fcStock,
@@ -204,10 +240,14 @@ function renderFCSummary() {
   <table class="zebra center">
     <tr><th>FC</th><th>SKUs</th><th>Total Sent</th></tr>`;
 
-  Object.keys(STATE.results).forEach(fc => {
-    const rows = STATE.results[fc];
+  Object.keys(STATE.results).forEach(fcKey => {
+    const rows = STATE.results[fcKey];
     const totalSent = rows.reduce((s, r) => s + r['Sent Qty'], 0);
-    html += `<tr><td>${fc}</td><td>${rows.length}</td><td>${totalSent}</td></tr>`;
+    html += `<tr>
+      <td>${STATE.fcLabels[fcKey]}</td>
+      <td>${rows.length}</td>
+      <td>${totalSent}</td>
+    </tr>`;
   });
 
   fcSummaryBox.innerHTML = html + '</table>';
@@ -218,8 +258,11 @@ function renderFCSaleSummary() {
   <table class="zebra center">
     <tr><th>FC</th><th>Total Units Sold</th></tr>`;
 
-  Object.keys(STATE.fcSaleSummary).forEach(fc => {
-    html += `<tr><td>${fc}</td><td>${STATE.fcSaleSummary[fc]}</td></tr>`;
+  Object.keys(STATE.fcSaleSummary).forEach(fcKey => {
+    html += `<tr>
+      <td>${STATE.fcLabels[fcKey]}</td>
+      <td>${STATE.fcSaleSummary[fcKey]}</td>
+    </tr>`;
   });
 
   fcSaleBox.innerHTML = html + '</table>';
@@ -229,22 +272,22 @@ function renderTabs() {
   tabsContainer.innerHTML = '';
   const fcs = Object.keys(STATE.results);
 
-  fcs.forEach((fc, idx) => {
+  fcs.forEach((fcKey, idx) => {
     const btn = document.createElement('button');
     btn.className = 'tab' + (idx === 0 ? ' active' : '');
-    btn.textContent = fc;
-    btn.onclick = () => showTab(fc, btn);
+    btn.textContent = STATE.fcLabels[fcKey];
+    btn.onclick = () => showTab(fcKey, btn);
     tabsContainer.appendChild(btn);
   });
 
   showTab(fcs[0], tabsContainer.children[0]);
 }
 
-function showTab(fc, btn) {
+function showTab(fcKey, btn) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
 
-  const rows = STATE.results[fc];
+  const rows = STATE.results[fcKey];
   let html = `<table class="zebra center"><tr>`;
   Object.keys(rows[0]).forEach(h => html += `<th>${h}</th>`);
   html += `</tr>`;
