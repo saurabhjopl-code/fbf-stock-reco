@@ -202,3 +202,29 @@ body {
   text-align: right;
   margin-bottom: 12px;
 }
+/* ZEBRA TABLES */
+table.zebra {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+table.zebra th {
+  background: #f3f4f6;
+  text-align: left;
+  padding: 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+table.zebra td {
+  padding: 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+table.zebra tr:nth-child(even) {
+  background: #fafafa;
+}
+
+table.zebra td:nth-child(n+3) {
+  text-align: right;
+}
