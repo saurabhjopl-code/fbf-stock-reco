@@ -1,0 +1,161 @@
+/* RESET */
+* {
+  box-sizing: border-box;
+  font-family: "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f4f6f9;
+  color: #1f2937;
+}
+
+/* HEADER */
+.app-header {
+  background: #111827;
+  color: #ffffff;
+  padding: 16px 24px;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+/* LAYOUT */
+.container {
+  max-width: 1200px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+/* FILE UPLOAD */
+.file-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.file-row {
+  display: grid;
+  grid-template-columns: 200px 1fr 120px;
+  align-items: center;
+  gap: 12px;
+}
+
+.file-row label {
+  font-weight: 600;
+}
+
+.status {
+  font-size: 12px;
+  text-align: right;
+}
+
+.status.pending {
+  color: #9ca3af;
+}
+
+/* ACTION BAR */
+.action-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.btn-primary {
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  font-size: 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background: #1d4ed8;
+}
+
+.btn-secondary {
+  background: #e5e7eb;
+  color: #374151;
+  border: none;
+  padding: 12px 20px;
+  font-size: 14px;
+  border-radius: 6px;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* CONFIG */
+.collapsible summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.config-grid label {
+  font-size: 13px;
+  color: #374151;
+}
+
+/* RESULTS */
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.placeholder {
+  background: #f9fafb;
+  border: 1px dashed #d1d5db;
+  padding: 24px;
+  text-align: center;
+  color: #6b7280;
+  border-radius: 6px;
+}
+
+/* TABS */
+.tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 16px;
+}
+
+.tab {
+  background: none;
+  border: none;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.tab.active {
+  color: #2563eb;
+  border-bottom: 3px solid #2563eb;
+}
+
+.export-row {
+  text-align: right;
+  margin-bottom: 12px;
+}
