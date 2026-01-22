@@ -1,11 +1,10 @@
 /* ======================================================
    FBF STOCK RECOMMENDATION ENGINE
-   VERSION: V2.0 (STRUCTURED LOGIC)
-   BASED ON: V1.8 (WORKING)
-   UI: LOCKED
+   VERSION: V2.1 (UNIWARE COLUMNS ADDED – SAFE)
+   UI & FLOW: LOCKED
 ====================================================== */
 
-console.log('LOGIC V2.0 LOADED');
+console.log('LOGIC V2.1 LOADED');
 
 /* ================= FC MASTER ================= */
 const FC_MAP = {
@@ -24,8 +23,7 @@ const FC_MAP = {
 };
 
 function normalizeRaw(v) {
-  return String(v || '')
-    .toLowerCase()
+  return String(v || '').toLowerCase()
     .replace(/[^a-z0-9]/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '');
@@ -41,10 +39,11 @@ const STATE = {
   files: {},
   results: {},
   fcSaleSummary: {},
-  fcLabels: {}
+  fcLabels: {},
+  uniStockView: {}
 };
 
-/* ================= ELEMENTS (LOCKED) ================= */
+/* ================= ELEMENTS ================= */
 const progressBar = document.querySelector('.progress-bar');
 const generateBtn = document.querySelector('.action-bar .btn-primary');
 const exportBtn = document.querySelector('.action-bar .btn-secondary');
@@ -96,111 +95,6 @@ document.querySelectorAll('#fileSection .file-row').forEach((row, i) => {
   };
 });
 
-/* ======================================================
-   CALCULATION MODULES (PURE LOGIC)
-====================================================== */
-
-function calcUniwareStock(rows) {
-  const map = {};
-  rows.forEach(r => map[r['Sku Code']] = +r['Available (ATP)'] || 0);
-  return map;
-}
-
-function calcFKAsk(rows) {
-  const ask = {}, skuToUni = {};
-  rows.forEach(r => {
-    const fc = resolveFC(r['FC']);
-    if (!fc) return;
-    skuToUni[r['SKU Id']] = r['Uniware SKU'];
-    ask[`${r['SKU Id']}|${fc.key}`] = +r['Quantity Sent'] || 0;
-    STATE.fcLabels[fc.key] = fc.label;
-  });
-  return { ask, skuToUni };
-}
-
-function calcSales30D(rows) {
-  const saleMap = {}, fcSum = {};
-  rows.forEach(r => {
-    const fc = resolveFC(r['Location Id']);
-    if (!fc) return;
-    const key = `${r['SKU ID']}|${fc.key}`;
-    const qty = +r['Gross Units'] || 0;
-    saleMap[key] = (saleMap[key] || 0) + qty;
-    fcSum[fc.key] = (fcSum[fc.key] || 0) + qty;
-    STATE.fcLabels[fc.key] = fc.label;
-  });
-  return { saleMap, fcSum };
-}
-
-function calcFBFStock(rows) {
-  const map = {};
-  rows.forEach(r => {
-    const fc = resolveFC(r['Warehouse Id']);
-    if (!fc) return;
-    map[`${r['SKU']}|${fc.key}`] = +r['Live on Website'] || 0;
-    STATE.fcLabels[fc.key] = fc.label;
-  });
-  return map;
-}
-
-function calcAllocations({ saleMap, fbfMap, askMap, skuToUni, uniStock }) {
-  const universe = new Set([
-    ...Object.keys(saleMap),
-    ...Object.keys(fbfMap),
-    ...Object.keys(askMap)
-  ]);
-
-  const results = {};
-
-  universe.forEach(key => {
-    const [mpSku, fcKey] = key.split('|');
-    const sale30 = saleMap[key] || 0;
-    const fcStock = fbfMap[key] || 0;
-    const fkAsk = askMap[key] || 0;
-    const uniSku = skuToUni[mpSku];
-
-    let sent = 0, remark = '', drr = '-', fcSC = '-';
-
-    if (sale30 === 0) {
-      remark = 'No Sale in last 30D';
-    } else {
-      drr = sale30 / 30;
-      fcSC = (fcStock / drr).toFixed(2);
-
-      if (+fcSC >= STATE.config.targetSC) {
-        remark = 'Already sufficient SC';
-      } else if (fkAsk === 0) {
-        remark = 'FK Ask not available';
-      } else if (!uniSku || (uniStock[uniSku] || 0) < STATE.config.minUniware) {
-        remark = 'Uniware stock below threshold';
-      } else {
-        let need = drr * STATE.config.targetSC - fcStock;
-        need = Math.min(need, fkAsk, uniStock[uniSku] - STATE.config.minUniware);
-        if (need >= STATE.config.minUniware) {
-          sent = Math.floor(need);
-          uniStock[uniSku] -= sent;
-        } else {
-          remark = 'Uniware stock below threshold';
-        }
-      }
-    }
-
-    if (!results[fcKey]) results[fcKey] = [];
-    results[fcKey].push({
-      'MP SKU': mpSku,
-      '30D Sale': sale30,
-      'FC Stock': fcStock,
-      'FC DRR': drr === '-' ? '-' : drr.toFixed(3),
-      'FC SC': fcSC,
-      'FK Ask': fkAsk,
-      'Sent Qty': sent,
-      'Remarks': sent ? '' : remark
-    });
-  });
-
-  return results;
-}
-
 /* ================= CORE ENGINE ================= */
 async function runEngine() {
   readConfig();
@@ -215,22 +109,115 @@ async function runEngine() {
 
   setProgress(30);
 
-  const uniStock = calcUniwareStock(uniware);
-  const { ask, skuToUni } = calcFKAsk(fcAsk);
-  const { saleMap, fcSum } = calcSales30D(sales);
-  const fbfMap = calcFBFStock(fbf);
+  /* ---- UNIWARE STOCK ---- */
+  const uniStock = {};
+  uniware.forEach(r => {
+    uniStock[r['Sku Code']] = +r['Available (ATP)'] || 0;
+  });
+  STATE.uniStockView = { ...uniStock };
 
-  STATE.fcSaleSummary = fcSum;
+  /* ---- FK ASK + SKU MAP ---- */
+  const fkAskMap = {};
+  const skuToUniware = {};
+
+  fcAsk.forEach(r => {
+    const fc = resolveFC(r['FC']);
+    if (!fc) return;
+    skuToUniware[r['SKU Id']] = r['Uniware SKU'];
+    fkAskMap[`${r['SKU Id']}|${fc.key}`] = +r['Quantity Sent'] || 0;
+    STATE.fcLabels[fc.key] = fc.label;
+  });
+
+  /* ---- SALES ---- */
+  const saleMap = {};
+  const fcSaleSummary = {};
+
+  sales.forEach(r => {
+    const fc = resolveFC(r['Location Id']);
+    if (!fc) return;
+    const key = `${r['SKU ID']}|${fc.key}`;
+    const qty = +r['Gross Units'] || 0;
+    saleMap[key] = (saleMap[key] || 0) + qty;
+    fcSaleSummary[fc.key] = (fcSaleSummary[fc.key] || 0) + qty;
+    STATE.fcLabels[fc.key] = fc.label;
+  });
+
+  STATE.fcSaleSummary = fcSaleSummary;
+
+  /* ---- FBF STOCK ---- */
+  const fbfMap = {};
+  fbf.forEach(r => {
+    const fc = resolveFC(r['Warehouse Id']);
+    if (!fc) return;
+    fbfMap[`${r['SKU']}|${fc.key}`] = +r['Live on Website'] || 0;
+    STATE.fcLabels[fc.key] = fc.label;
+  });
 
   setProgress(60);
 
-  STATE.results = calcAllocations({
-    saleMap,
-    fbfMap,
-    askMap: ask,
-    skuToUni,
-    uniStock
+  /* ---- BUILD RESULTS ---- */
+  const universe = new Set([
+    ...Object.keys(saleMap),
+    ...Object.keys(fbfMap),
+    ...Object.keys(fkAskMap)
+  ]);
+
+  const fcResults = {};
+
+  universe.forEach(key => {
+    const [mpSku, fcKey] = key.split('|');
+    const uniSku = skuToUniware[mpSku] || '';
+    const sale30 = saleMap[key] || 0;
+    const fcStock = fbfMap[key] || 0;
+    const fkAsk = fkAskMap[key] || 0;
+
+    let sent = 0, remark = '', drr = '-', fcSC = '-';
+
+    if (sale30 === 0) {
+      remark = 'No Sale in last 30D';
+    } else {
+      drr = sale30 / 30;
+      fcSC = (fcStock / drr).toFixed(2);
+
+      if (+fcSC >= STATE.config.targetSC) {
+        remark = 'Already sufficient SC';
+      } else if (fkAsk === 0) {
+        remark = 'FK Ask not available';
+      } else if ((uniStock[uniSku] || 0) < STATE.config.minUniware) {
+        remark = 'Uniware stock below threshold';
+      } else {
+        let need = drr * STATE.config.targetSC - fcStock;
+        need = Math.min(need, fkAsk, uniStock[uniSku] - STATE.config.minUniware);
+        if (need >= STATE.config.minUniware) {
+          sent = Math.floor(need);
+          uniStock[uniSku] -= sent;
+        } else {
+          remark = 'Uniware stock below threshold';
+        }
+      }
+    }
+
+    if (!fcResults[fcKey]) fcResults[fcKey] = [];
+
+    const row = {
+      'MP SKU': mpSku,
+      ...(fcKey !== 'seller' && {
+        'Uniware SKU': uniSku,
+        'Uniware Stock': STATE.uniStockView[uniSku] || 0
+      }),
+      '30D Sale': sale30,
+      'FC Stock': fcStock,
+      'FC DRR': drr === '-' ? '-' : drr.toFixed(3),
+      'FC SC': fcSC,
+      'FK Ask': fkAsk,
+      'Sent Qty': sent,
+      'Remarks': sent ? '' : remark
+    };
+
+    fcResults[fcKey].push(row);
   });
+
+  STATE.results = fcResults;
 
   renderFCSummary();
   renderFCSaleSummary();
