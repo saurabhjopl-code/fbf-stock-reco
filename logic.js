@@ -1,30 +1,26 @@
 /* ======================================================
    FBF STOCK RECOMMENDATION ENGINE
-   VERSION: V1.8 (UNIWARE SKU FIX)
-   UI VERSION: V1.1 (LOCKED)
+   VERSION: V2.0 (STRUCTURED LOGIC)
+   BASED ON: V1.8 (WORKING)
+   UI: LOCKED
 ====================================================== */
 
-console.log('LOGIC V1.8 LOADED');
+console.log('LOGIC V2.0 LOADED');
 
-/* ================= FC MASTER MAP ================= */
+/* ================= FC MASTER ================= */
 const FC_MAP = {
-  'ulub_bts': { key: 'kolkata', label: 'Kolkata' },
-  'kolkata_uluberia_bts': { key: 'kolkata', label: 'Kolkata' },
-
-  'malur_bts': { key: 'bangalore', label: 'Bangalore' },
-  'malur_bts_warehouse': { key: 'bangalore', label: 'Bangalore' },
-
-  'bhi_vas_wh_nl_01nl': { key: 'mumbai', label: 'Mumbai' },
-  'bhiwandi_bts': { key: 'mumbai', label: 'Mumbai' },
-
-  'gur_san_wh_nl_01nl': { key: 'sanpka', label: 'Sanpka' },
-  'sanpka_01': { key: 'sanpka', label: 'Sanpka' },
-
-  'hyderabad_medchal_01': { key: 'hyderabad', label: 'Hyderabad' },
-  'luc_has_wh_nl_02nl': { key: 'lucknow', label: 'Lucknow' },
-
-  'loc979d1d9aca154ae0a5d72fc1a199aece': { key: 'seller', label: 'Seller' },
-  'na': { key: 'seller', label: 'Seller' }
+  ulub_bts: { key: 'kolkata', label: 'Kolkata' },
+  kolkata_uluberia_bts: { key: 'kolkata', label: 'Kolkata' },
+  malur_bts: { key: 'bangalore', label: 'Bangalore' },
+  malur_bts_warehouse: { key: 'bangalore', label: 'Bangalore' },
+  bhi_vas_wh_nl_01nl: { key: 'mumbai', label: 'Mumbai' },
+  bhiwandi_bts: { key: 'mumbai', label: 'Mumbai' },
+  gur_san_wh_nl_01nl: { key: 'sanpka', label: 'Sanpka' },
+  sanpka_01: { key: 'sanpka', label: 'Sanpka' },
+  hyderabad_medchal_01: { key: 'hyderabad', label: 'Hyderabad' },
+  luc_has_wh_nl_02nl: { key: 'lucknow', label: 'Lucknow' },
+  loc979d1d9aca154ae0a5d72fc1a199aece: { key: 'seller', label: 'Seller' },
+  na: { key: 'seller', label: 'Seller' }
 };
 
 function normalizeRaw(v) {
@@ -36,11 +32,10 @@ function normalizeRaw(v) {
 }
 
 function resolveFC(raw) {
-  const n = normalizeRaw(raw);
-  return FC_MAP[n] || null;
+  return FC_MAP[normalizeRaw(raw)] || null;
 }
 
-/* ================= GLOBAL STATE ================= */
+/* ================= STATE ================= */
 const STATE = {
   config: {},
   files: {},
@@ -49,7 +44,7 @@ const STATE = {
   fcLabels: {}
 };
 
-/* ================= ELEMENTS ================= */
+/* ================= ELEMENTS (LOCKED) ================= */
 const progressBar = document.querySelector('.progress-bar');
 const generateBtn = document.querySelector('.action-bar .btn-primary');
 const exportBtn = document.querySelector('.action-bar .btn-secondary');
@@ -101,90 +96,68 @@ document.querySelectorAll('#fileSection .file-row').forEach((row, i) => {
   };
 });
 
-/* ================= CORE ENGINE ================= */
-async function runEngine() {
-  readConfig();
-  setProgress(10);
+/* ======================================================
+   CALCULATION MODULES (PURE LOGIC)
+====================================================== */
 
-  const [sales, fbf, uniware, fcAsk] = await Promise.all([
-    readFile(STATE.files[0]),
-    readFile(STATE.files[1]),
-    readFile(STATE.files[2]),
-    readFile(STATE.files[3])
-  ]);
+function calcUniwareStock(rows) {
+  const map = {};
+  rows.forEach(r => map[r['Sku Code']] = +r['Available (ATP)'] || 0);
+  return map;
+}
 
-  setProgress(30);
-
-  /* ---------- UNIWARE STOCK (BY UNIWARE SKU) ---------- */
-  const uniStock = {};
-  uniware.forEach(r => {
-    uniStock[r['Sku Code']] = +r['Available (ATP)'] || 0;
+function calcFKAsk(rows) {
+  const ask = {}, skuToUni = {};
+  rows.forEach(r => {
+    const fc = resolveFC(r['FC']);
+    if (!fc) return;
+    skuToUni[r['SKU Id']] = r['Uniware SKU'];
+    ask[`${r['SKU Id']}|${fc.key}`] = +r['Quantity Sent'] || 0;
+    STATE.fcLabels[fc.key] = fc.label;
   });
+  return { ask, skuToUni };
+}
 
-  /* ---------- FK ASK + UNIWARE SKU MAP ---------- */
-  const fkAskMap = {};
-  const skuToUniware = {};
-
-  fcAsk.forEach(r => {
-    const fcObj = resolveFC(r['FC']);
-    if (!fcObj) return;
-
-    const mpSku = r['SKU Id'];
-    const uniSku = r['Uniware SKU'];
-
-    skuToUniware[mpSku] = uniSku;
-    fkAskMap[`${mpSku}|${fcObj.key}`] = +r['Quantity Sent'] || 0;
-    STATE.fcLabels[fcObj.key] = fcObj.label;
-  });
-
-  /* ---------- 30D SALE ---------- */
-  const saleMap = {};
-  const fcSaleSummary = {};
-
-  sales.forEach(r => {
-    const fcObj = resolveFC(r['Location Id']);
-    if (!fcObj) return;
-
-    const mpSku = r['SKU ID'];
+function calcSales30D(rows) {
+  const saleMap = {}, fcSum = {};
+  rows.forEach(r => {
+    const fc = resolveFC(r['Location Id']);
+    if (!fc) return;
+    const key = `${r['SKU ID']}|${fc.key}`;
     const qty = +r['Gross Units'] || 0;
-
-    const key = `${mpSku}|${fcObj.key}`;
     saleMap[key] = (saleMap[key] || 0) + qty;
-    fcSaleSummary[fcObj.key] = (fcSaleSummary[fcObj.key] || 0) + qty;
-
-    STATE.fcLabels[fcObj.key] = fcObj.label;
+    fcSum[fc.key] = (fcSum[fc.key] || 0) + qty;
+    STATE.fcLabels[fc.key] = fc.label;
   });
+  return { saleMap, fcSum };
+}
 
-  STATE.fcSaleSummary = fcSaleSummary;
-
-  /* ---------- FBF STOCK ---------- */
-  const fbfMap = {};
-  fbf.forEach(r => {
-    const fcObj = resolveFC(r['Warehouse Id']);
-    if (!fcObj) return;
-
-    fbfMap[`${r['SKU']}|${fcObj.key}`] = +r['Live on Website'] || 0;
-    STATE.fcLabels[fcObj.key] = fcObj.label;
+function calcFBFStock(rows) {
+  const map = {};
+  rows.forEach(r => {
+    const fc = resolveFC(r['Warehouse Id']);
+    if (!fc) return;
+    map[`${r['SKU']}|${fc.key}`] = +r['Live on Website'] || 0;
+    STATE.fcLabels[fc.key] = fc.label;
   });
+  return map;
+}
 
-  setProgress(60);
-
-  /* ---------- SKU–FC UNIVERSE ---------- */
+function calcAllocations({ saleMap, fbfMap, askMap, skuToUni, uniStock }) {
   const universe = new Set([
     ...Object.keys(saleMap),
     ...Object.keys(fbfMap),
-    ...Object.keys(fkAskMap)
+    ...Object.keys(askMap)
   ]);
 
-  const fcResults = {};
+  const results = {};
 
   universe.forEach(key => {
     const [mpSku, fcKey] = key.split('|');
-    const uniSku = skuToUniware[mpSku];
-
     const sale30 = saleMap[key] || 0;
     const fcStock = fbfMap[key] || 0;
-    const fkAsk = fkAskMap[key] || 0;
+    const fkAsk = askMap[key] || 0;
+    const uniSku = skuToUni[mpSku];
 
     let sent = 0, remark = '', drr = '-', fcSC = '-';
 
@@ -202,12 +175,7 @@ async function runEngine() {
         remark = 'Uniware stock below threshold';
       } else {
         let need = drr * STATE.config.targetSC - fcStock;
-        need = Math.min(
-          need,
-          fkAsk,
-          uniStock[uniSku] - STATE.config.minUniware
-        );
-
+        need = Math.min(need, fkAsk, uniStock[uniSku] - STATE.config.minUniware);
         if (need >= STATE.config.minUniware) {
           sent = Math.floor(need);
           uniStock[uniSku] -= sent;
@@ -217,8 +185,8 @@ async function runEngine() {
       }
     }
 
-    if (!fcResults[fcKey]) fcResults[fcKey] = [];
-    fcResults[fcKey].push({
+    if (!results[fcKey]) results[fcKey] = [];
+    results[fcKey].push({
       'MP SKU': mpSku,
       '30D Sale': sale30,
       'FC Stock': fcStock,
@@ -230,7 +198,39 @@ async function runEngine() {
     });
   });
 
-  STATE.results = fcResults;
+  return results;
+}
+
+/* ================= CORE ENGINE ================= */
+async function runEngine() {
+  readConfig();
+  setProgress(10);
+
+  const [sales, fbf, uniware, fcAsk] = await Promise.all([
+    readFile(STATE.files[0]),
+    readFile(STATE.files[1]),
+    readFile(STATE.files[2]),
+    readFile(STATE.files[3])
+  ]);
+
+  setProgress(30);
+
+  const uniStock = calcUniwareStock(uniware);
+  const { ask, skuToUni } = calcFKAsk(fcAsk);
+  const { saleMap, fcSum } = calcSales30D(sales);
+  const fbfMap = calcFBFStock(fbf);
+
+  STATE.fcSaleSummary = fcSum;
+
+  setProgress(60);
+
+  STATE.results = calcAllocations({
+    saleMap,
+    fbfMap,
+    askMap: ask,
+    skuToUni,
+    uniStock
+  });
 
   renderFCSummary();
   renderFCSaleSummary();
@@ -240,7 +240,7 @@ async function runEngine() {
   exportBtn.disabled = false;
 }
 
-/* ================= RENDERING ================= */
+/* ================= RENDERING (UNCHANGED) ================= */
 function renderFCSummary() {
   let html = `<h3>FC Performance Summary</h3>
   <table class="zebra center">
@@ -307,7 +307,7 @@ function showTab(fcKey, btn) {
   tabContent.innerHTML = html + '</table>';
 }
 
-/* ================= GENERATE ================= */
+/* ================= GENERATE (LOCKED) ================= */
 generateBtn.onclick = () => {
   if (Object.keys(STATE.files).length !== 4) {
     alert('Please upload all 4 files');
