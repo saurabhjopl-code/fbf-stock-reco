@@ -1,58 +1,56 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8" />
-<title>FBF Stock Recommendation</title>
+<title>FBF Stock Recommendation Engine</title>
 <link rel="stylesheet" href="assets/css/base.css" />
 <link rel="stylesheet" href="assets/css/layout.css" />
 <link rel="stylesheet" href="assets/css/tables.css" />
 </head>
 <body>
-<header>
+
+
 <h1>FBF Stock Recommendation Engine</h1>
-<div id="config-panel">
-<label>Target SC <input type="number" id="cfgTargetSC" value="30" /></label>
-<label>Min Uniware <input type="number" id="cfgMinUni" value="10" /></label>
-<label>Max Return % <input type="number" id="cfgMaxReturn" value="30" /></label>
+
+
+<div class="top-controls">
+<label>Target SC <input id="targetSC" type="number" value="30"></label>
+<label>Min Uniware <input id="minUni" type="number" value="10"></label>
+<label>Max Return % <input id="maxReturn" type="number" value="30"></label>
 </div>
-</header>
 
 
-<section class="controls">
+<div class="file-controls">
 <input type="file" id="saleFile" />
 <input type="file" id="fbfFile" />
 <input type="file" id="uniFile" />
-<input type="file" id="fcRecoFile" />
+<input type="file" id="fcAskFile" />
 <button id="generateBtn">Generate</button>
 <button id="exportAllBtn" disabled>Export All</button>
-</section>
+</div>
 
 
-<div id="progress"><div id="progressBar"></div></div>
+<div id="progress"><div id="bar"></div></div>
 
 
-<section class="summary">
+<div class="summary">
 <div id="fcSummary"></div>
 <div id="topSku"></div>
-</section>
+</div>
 
 
-<section id="fcTabs"></section>
+<div id="tabs"></div>
 
 
 <script src="assets/libs/xlsx.full.min.js"></script>
 <script src="assets/libs/papaparse.min.js"></script>
-
-
 <script src="assets/js/config.js"></script>
-<script src="assets/js/validators.js"></script>
-<script src="assets/js/parsers.js"></script>
-<script src="assets/js/consolidator.js"></script>
-<script src="assets/js/metrics.js"></script>
-<script src="assets/js/priorityEngine.js"></script>
-<script src="assets/js/recommender.js"></script>
-<script src="assets/js/uiRenderer.js"></script>
-<script src="assets/js/exporter.js"></script>
+<script src="assets/js/parser.js"></script>
+<script src="assets/js/engine.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/export.js"></script>
 <script src="assets/js/main.js"></script>
+
+
 </body>
 </html>
